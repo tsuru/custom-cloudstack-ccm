@@ -2,14 +2,16 @@ apiVersion: v1
 kind: Service
 metadata:
   name: default-http-backend
+  namespace: default
+  labels:
+    name: default-backend
+    app: csingress
 spec:
-  type: NodePort
   ports:
   - port: 80
-    targetPort: 8080
-    protocol: TCP
-    name: http
-
+    targetPort: 10254
+  selector:
+    app: csingress
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
