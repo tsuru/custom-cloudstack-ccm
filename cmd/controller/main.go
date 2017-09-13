@@ -4,6 +4,11 @@
 
 package main
 
-func main() {
+import (
+	"github.com/tsuru/cloudstack-ingress-controller/controller"
+)
 
+func main() {
+	dc := &controller.DummyController{}
+	dc.Start()
 }
