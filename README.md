@@ -1,2 +1,3 @@
-# cloudstack-ingress-controller
-Kubernetes ingress controller that manages Cloudstack LBs
+# custom-cloustack-ccm (WIP)
+
+A customized cloudstack cloud controller manager for kubernetes.

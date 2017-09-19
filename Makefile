@@ -1,4 +1,4 @@
-BINARY=csingress
+BINARY=csccm
 TAG=latest
 IMAGE=tsuru/$(BINARY)
 LOCAL_REGISTRY=10.200.10.1:5000
@@ -28,7 +28,7 @@ test:
 	go test ./... -race -cover
 
 .PHONY: lint
-lint: 
+lint:
 	go get -u github.com/alecthomas/gometalinter; \
 	gometalinter --install; \
 	go install  ./...; \
