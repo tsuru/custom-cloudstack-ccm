@@ -7,4 +7,4 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=builder /go/src/github.com/tsuru/custom-cloudstack-ccm/csccm .
-CMD ["./csingress"]
+CMD ["./csccm"]
