@@ -5,7 +5,7 @@
 package main
 
 import (
-	"github.com/tsuru/cloudstack-ingress-controller/controller"
+	"github.com/tsuru/custom-cloudstack-ccm/controller"
 )
 
 func main() {
