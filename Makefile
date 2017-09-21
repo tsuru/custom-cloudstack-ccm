@@ -5,7 +5,7 @@ LOCAL_REGISTRY=10.200.10.1:5000
 LINTER_ARGS = \
 	-j 4 --enable-gc -s vendor -e '.*/vendor/.*' --vendor --enable=misspell --enable=gofmt --enable=goimports --enable=unused \
 	--deadline=60m --tests
-RUN_FLAGS=-v 9 --default-backend-service "default/default-http-backend"
+RUN_FLAGS=-v 4
 
 .PHONY: run
 run: build
