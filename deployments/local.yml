@@ -1,49 +1,41 @@
 apiVersion: v1
-kind: Service
+kind: ServiceAccount
 metadata:
-  name: default-http-backend
-  namespace: default
-  labels:
-    name: default-backend
-    app: csingress
-spec:
-  ports:
-  - port: 80
-    targetPort: 10254
-  selector:
-    app: csingress
+  name: cloud-controller-manager
+  namespace: kube-system
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: csingress
+  name: csccm
+  labels:
+    app: csccm
+  namespace: kube-system
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
   template:
     metadata:
       labels:
-        app: csingress
+        app: csccm
     spec:
+      serviceAccountName: cloud-controller-manager
       containers:
-      - name: csingress
-        image: IMAGE
-        imagePullPolicy: Always
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 10254
-            scheme: HTTP
-          timeoutSeconds: 5
-        command: ["./csingress"]
-        args: ["--default-backend-service", "default/default-http-backend"]
-        env:
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
+        - image: IMAGE
+          imagePullPolicy: Always
+          name: csccm
+          command: ["./csccm"]
+          args:
+          - --cloud-config
+          - /etc/kubernetes/cloud-config
+          - --v=4
+          volumeMounts:
+          - mountPath: /etc/kubernetes
+            name: k8s
+          ports:
+            - containerPort: 9844
+              name: web
+              protocol: TCP
+      volumes:
+      - name: k8s
+        hostPath:
+          path: /etc/kubernetes/
