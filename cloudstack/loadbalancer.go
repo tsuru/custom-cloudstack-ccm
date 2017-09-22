@@ -94,8 +94,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	if !lb.hasLoadBalancerIP() {
 		// Create or retrieve the load balancer IP.
-		if err := lb.getLoadBalancerIP(service.Spec.LoadBalancerIP); err != nil {
-			return nil, err
+		if errLB := lb.getLoadBalancerIP(service.Spec.LoadBalancerIP); errLB != nil {
+			return nil, errLB
 		}
 
 		if lb.ipAddr != "" && lb.ipAddr != service.Spec.LoadBalancerIP {
@@ -129,8 +129,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 		if needsUpdate {
 			glog.V(4).Infof("Updating load balancer rule: %v", lbRuleName)
-			if err := lb.updateLoadBalancerRule(lbRuleName); err != nil {
-				return nil, err
+			if errLB := lb.updateLoadBalancerRule(lbRuleName); errLB != nil {
+				return nil, errLB
 			}
 			// Delete the rule from the map, to prevent it being deleted.
 			delete(lb.rules, lbRuleName)
