@@ -39,18 +39,6 @@ type loadBalancer struct {
 	rules     map[string]*cloudstack.LoadBalancerRule
 }
 
-func (lb *loadBalancer) SetAlgorithm(service *v1.Service) error {
-	switch service.Spec.SessionAffinity {
-	case v1.ServiceAffinityNone:
-		lb.algorithm = "roundrobin"
-	case v1.ServiceAffinityClientIP:
-		lb.algorithm = "source"
-	default:
-		return fmt.Errorf("unsupported load balancer affinity: %v", service.Spec.SessionAffinity)
-	}
-	return nil
-}
-
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
 func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1.LoadBalancerStatus, bool, error) {
 	glog.V(4).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
@@ -88,7 +76,9 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		return nil, err
 	}
 
-	lb.SetAlgorithm(service)
+	lb.setAlgorithm(service)
+
+	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
 	var networkIDs []string
 	lb.hostIDs, networkIDs, err = cs.extractIDs(nodes)
@@ -178,6 +168,8 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 	if err != nil {
 		return err
 	}
+
+	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
 	lb.hostIDs, _, err = cs.extractIDs(nodes)
 	if err != nil {
@@ -317,6 +309,22 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, error) {
 	}
 
 	return hostIDs, networkIDs, nil
+}
+
+func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Service) []*v1.Node {
+	if cs.serviceLabel == "" || cs.nodeLabel == "" {
+		return nodes
+	}
+	labelValue := service.Labels[cs.serviceLabel]
+
+	var filteredNodes []*v1.Node
+	for i := range nodes {
+		if nodes[i].Labels[cs.nodeLabel] != labelValue {
+			continue
+		}
+		filteredNodes = append(filteredNodes, nodes[i])
+	}
+	return filteredNodes
 }
 
 // hasLoadBalancerIP returns true if we have a load balancer address and ID.
@@ -520,6 +528,18 @@ func (lb *loadBalancer) removeHostsFromRule(lbRule *cloudstack.LoadBalancerRule,
 		return fmt.Errorf("error removing hosts from load balancer rule %v: %v", lbRule.Name, err)
 	}
 
+	return nil
+}
+
+func (lb *loadBalancer) setAlgorithm(service *v1.Service) error {
+	switch service.Spec.SessionAffinity {
+	case v1.ServiceAffinityNone:
+		lb.algorithm = "roundrobin"
+	case v1.ServiceAffinityClientIP:
+		lb.algorithm = "source"
+	default:
+		return fmt.Errorf("unsupported load balancer affinity: %v", service.Spec.SessionAffinity)
+	}
 	return nil
 }
 

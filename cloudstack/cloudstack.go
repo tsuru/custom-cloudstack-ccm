@@ -33,12 +33,14 @@ const ProviderName = "custom-cloudstack"
 // CSConfig wraps the config for the CloudStack cloud provider.
 type CSConfig struct {
 	Global struct {
-		APIURL      string `gcfg:"api-url"`
-		APIKey      string `gcfg:"api-key"`
-		SecretKey   string `gcfg:"secret-key"`
-		SSLNoVerify bool   `gcfg:"ssl-no-verify"`
-		ProjectID   string `gcfg:"project-id"`
-		Zone        string `gcfg:"zone"`
+		APIURL       string `gcfg:"api-url"`
+		APIKey       string `gcfg:"api-key"`
+		SecretKey    string `gcfg:"secret-key"`
+		SSLNoVerify  bool   `gcfg:"ssl-no-verify"`
+		ProjectID    string `gcfg:"project-id"`
+		Zone         string `gcfg:"zone"`
+		ServiceLabel string `gcfg:"service-label"`
+		NodeLabel    string `gcfg:"node-label"`
 	}
 }
 
@@ -47,6 +49,10 @@ type CSCloud struct {
 	client    *cloudstack.CloudStackClient
 	projectID string // If non-"", all resources will be created within this project
 	zone      string
+
+	// Labels used to match services to nodes
+	serviceLabel string
+	nodeLabel    string
 }
 
 func init() {
@@ -77,8 +83,10 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 // newCSCloud creates a new instance of CSCloud.
 func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 	cs := &CSCloud{
-		projectID: cfg.Global.ProjectID,
-		zone:      cfg.Global.Zone,
+		projectID:    cfg.Global.ProjectID,
+		zone:         cfg.Global.Zone,
+		serviceLabel: cfg.Global.ServiceLabel,
+		nodeLabel:    cfg.Global.NodeLabel,
 	}
 
 	if cfg.Global.APIURL != "" && cfg.Global.APIKey != "" && cfg.Global.SecretKey != "" {
