@@ -39,6 +39,18 @@ type loadBalancer struct {
 	rules     map[string]*cloudstack.LoadBalancerRule
 }
 
+func (lb *loadBalancer) SetAlgorithm(service *v1.Service) error {
+	switch service.Spec.SessionAffinity {
+	case v1.ServiceAffinityNone:
+		lb.algorithm = "roundrobin"
+	case v1.ServiceAffinityClientIP:
+		lb.algorithm = "source"
+	default:
+		return fmt.Errorf("unsupported load balancer affinity: %v", service.Spec.SessionAffinity)
+	}
+	return nil
+}
+
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
 func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1.LoadBalancerStatus, bool, error) {
 	glog.V(4).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
@@ -76,15 +88,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		return nil, err
 	}
 
-	// Set the load balancer algorithm.
-	switch service.Spec.SessionAffinity {
-	case v1.ServiceAffinityNone:
-		lb.algorithm = "roundrobin"
-	case v1.ServiceAffinityClientIP:
-		lb.algorithm = "source"
-	default:
-		return nil, fmt.Errorf("unsupported load balancer affinity: %v", service.Spec.SessionAffinity)
-	}
+	lb.SetAlgorithm(service)
 
 	// Verify that all the hosts belong to the same network, and retrieve their ID's.
 	lb.hostIDs, lb.networkID, err = cs.verifyHosts(nodes)
