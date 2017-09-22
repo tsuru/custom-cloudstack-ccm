@@ -90,11 +90,12 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	lb.SetAlgorithm(service)
 
-	// Verify that all the hosts belong to the same network, and retrieve their ID's.
-	lb.hostIDs, lb.networkID, err = cs.verifyHosts(nodes)
+	var networkIDs []string
+	lb.hostIDs, networkIDs, err = cs.extractIDs(nodes)
 	if err != nil {
 		return nil, err
 	}
+	lb.networkID = networkIDs[0]
 
 	if !lb.hasLoadBalancerIP() {
 		// Create or retrieve the load balancer IP.
@@ -178,8 +179,7 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 		return err
 	}
 
-	// Verify that all the hosts belong to the same network, and retrieve their ID's.
-	lb.hostIDs, _, err = cs.verifyHosts(nodes)
+	lb.hostIDs, _, err = cs.extractIDs(nodes)
 	if err != nil {
 		return err
 	}
@@ -279,8 +279,8 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 	return lb, nil
 }
 
-// verifyHosts verifies if all hosts belong to the same network, and returns the host ID's and network ID.
-func (cs *CSCloud) verifyHosts(nodes []*v1.Node) ([]string, string, error) {
+// extractIDs extracts the VM ID for each node and their unique network IDs
+func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, error) {
 	hostNames := map[string]bool{}
 	for _, node := range nodes {
 		hostNames[node.Name] = true
@@ -295,25 +295,28 @@ func (cs *CSCloud) verifyHosts(nodes []*v1.Node) ([]string, string, error) {
 
 	l, err := cs.client.VirtualMachine.ListVirtualMachines(p)
 	if err != nil {
-		return nil, "", fmt.Errorf("error retrieving list of hosts: %v", err)
+		return nil, nil, fmt.Errorf("error retrieving list of hosts: %v", err)
 	}
 
 	var hostIDs []string
-	var networkID string
+	var networkIDs []string
 
-	// Check if the virtual machine is in the hosts slice, then add the corresponding ID.
+	networkMap := make(map[string]struct{})
+	// Check if the virtual machine is in the hosts slice, then add the corresponding IDs.
 	for _, vm := range l.VirtualMachines {
-		if hostNames[vm.Name] {
-			if networkID != "" && networkID != vm.Nic[0].Networkid {
-				return nil, "", fmt.Errorf("found hosts that belong to different networks")
-			}
-
-			networkID = vm.Nic[0].Networkid
-			hostIDs = append(hostIDs, vm.Id)
+		if !hostNames[vm.Name] {
+			continue
 		}
+		hostIDs = append(hostIDs, vm.Id)
+
+		if _, ok := networkMap[vm.Nic[0].Networkid]; ok {
+			continue
+		}
+		networkMap[vm.Nic[0].Networkid] = struct{}{}
+		networkIDs = append(networkIDs, vm.Nic[0].Networkid)
 	}
 
-	return hostIDs, networkID, nil
+	return hostIDs, networkIDs, nil
 }
 
 // hasLoadBalancerIP returns true if we have a load balancer address and ID.
