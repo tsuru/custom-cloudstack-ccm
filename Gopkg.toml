@@ -31,7 +31,8 @@
 
 [[constraint]]
   name = "github.com/xanzy/go-cloudstack"
-  version = "2.1.7"
+  source = "github.com/andrestc/go-cloudstack"
+  branch = "master"
 
 [[constraint]]
   revision = "087d1a2efeb6296f04bb0f54e7af9890052aa6d7"
@@ -44,7 +45,7 @@
   name = "k8s.io/apimachinery"
   revision = "1fd2e63a9a370677308a42f24fd40c86438afddf"
 [[override]]
-  name = "github.com/ugorji/go" 
+  name = "github.com/ugorji/go"
   revision = "ded73eae5db7e7a0ef6f55aace87a2873c5d2b74"
 
 

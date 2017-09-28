@@ -235,10 +235,11 @@
   revision = "ded73eae5db7e7a0ef6f55aace87a2873c5d2b74"
 
 [[projects]]
+  branch = "master"
   name = "github.com/xanzy/go-cloudstack"
   packages = ["cloudstack"]
-  revision = "fc8ab599c1a9b707303676d54b7bb64221916c88"
-  version = "v2.1.7"
+  revision = "59ea3ea84217919f61ad9e9f35977184cf8f052a"
+  source = "github.com/andrestc/go-cloudstack"
 
 [[projects]]
   branch = "master"
@@ -319,6 +320,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "3962815f01efd3187df12559190f7b51bc53ec55b8b59275e1828935dc66f688"
+  inputs-digest = "38d1fd89ec8287a41cb78d9e05e300aae4e7bb60f44e66e44f20c3ba96710831"
   solver-name = "gps-cdcl"
   solver-version = 1
