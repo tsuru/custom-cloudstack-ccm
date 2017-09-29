@@ -13,7 +13,7 @@ jobs:
   - script: make test
   - stage: lint
     script:
-    - while true; do echo .; sleep 30; done & make lint
+    - while true; do echo .; sleep 30; done & make lint && true
   - stage: push to docker
     script:
     - docker login -u $DOCKER_USER -p $DOCKER_PASS
