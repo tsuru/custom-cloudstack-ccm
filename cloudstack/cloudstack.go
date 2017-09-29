@@ -43,7 +43,8 @@ type CSConfig struct {
 		NodeLabel    string `gcfg:"node-label"`
 	}
 	Command struct {
-		AssociateIP string `gcfg:"associate-ip"`
+		AssociateIP    string `gcfg:"associate-ip"`
+		AssignNetworks string `gcfg:"assign-networks"`
 	} `gcfg:"custom-command"`
 }
 
@@ -59,6 +60,9 @@ type CSCloud struct {
 
 	// Custom command to be used to associate an IP to a LB
 	customAssociateIPCommand string
+
+	// Custom command to be used to assign multiple networks to a LB
+	customAssignNetworksCommand string
 }
 
 func init() {

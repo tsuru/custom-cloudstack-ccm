@@ -29,14 +29,14 @@ import (
 type loadBalancer struct {
 	*CSCloud
 
-	name      string
-	algorithm string
-	hostIDs   []string
-	ipAddr    string
-	ipAddrID  string
-	networkID string
-	projectID string
-	rules     map[string]*cloudstack.LoadBalancerRule
+	name       string
+	algorithm  string
+	hostIDs    []string
+	ipAddr     string
+	ipAddrID   string
+	networkIDs []string
+	projectID  string
+	rules      map[string]*cloudstack.LoadBalancerRule
 }
 
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
@@ -80,12 +80,10 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
-	var networkIDs []string
-	lb.hostIDs, networkIDs, err = cs.extractIDs(nodes)
+	lb.hostIDs, lb.networkIDs, err = cs.extractIDs(nodes)
 	if err != nil {
 		return nil, err
 	}
-	lb.networkID = networkIDs[0]
 
 	if !lb.hasLoadBalancerIP() {
 		// Create or retrieve the load balancer IP.
@@ -143,6 +141,11 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 			return nil, err
 		}
 
+		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRuleName)
+		if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
+			return nil, err
+		}
+
 	}
 
 	// Cleanup any rules that are now still in the rules map, as they are no longer needed.
@@ -171,7 +174,7 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
-	lb.hostIDs, _, err = cs.extractIDs(nodes)
+	lb.hostIDs, lb.networkIDs, err = cs.extractIDs(nodes)
 	if err != nil {
 		return err
 	}
@@ -190,6 +193,11 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 		if len(assign) > 0 {
 			glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lbRule.Name)
 			if err := lb.assignHostsToRule(lbRule, assign); err != nil {
+				return err
+			}
+
+			glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRule.Name)
+			if err := lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
 				return err
 			}
 		}
@@ -373,10 +381,10 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	glog.V(4).Infof("Allocate new IP for load balancer: %v", lb.name)
 	// If a network belongs to a VPC, the IP address needs to be associated with
 	// the VPC instead of with the network.
-	network, count, err := lb.client.Network.GetNetworkByID(lb.networkID, cloudstack.WithProject(lb.projectID))
+	network, count, err := lb.client.Network.GetNetworkByID(lb.networkIDs[0], cloudstack.WithProject(lb.projectID))
 	if err != nil {
 		if count == 0 {
-			return fmt.Errorf("could not find network %v", lb.networkID)
+			return fmt.Errorf("could not find network %v", lb.networkIDs[0])
 		}
 		return fmt.Errorf("error retrieving network: %v", err)
 	}
@@ -385,7 +393,7 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	if network.Vpcid != "" {
 		pc.SetParam("vpcid", network.Vpcid)
 	} else {
-		pc.SetParam("networkid", lb.networkID)
+		pc.SetParam("networkid", lb.networkIDs[0])
 	}
 	if lb.projectID != "" {
 		pc.SetParam("projectid", lb.projectID)
@@ -459,7 +467,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 		int(port.Port),
 	)
 
-	p.SetNetworkid(lb.networkID)
+	p.SetNetworkid(lb.networkIDs[0])
 	p.SetPublicipid(lb.ipAddrID)
 
 	switch port.Protocol {
@@ -518,6 +526,23 @@ func (lb *loadBalancer) assignHostsToRule(lbRule *cloudstack.LoadBalancerRule, h
 		return fmt.Errorf("error assigning hosts to load balancer rule %v: %v", lbRule.Name, err)
 	}
 
+	return nil
+}
+
+// assignNetworksToRule assigns networks to a load balancer rule.
+func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule, networkIDs []string) error {
+	if lb.customAssignNetworksCommand == "" {
+		return nil
+	}
+	p := &cloudstack.CustomServiceParams{}
+	if lb.projectID != "" {
+		p.SetParam("projectid", lb.projectID)
+	}
+	p.SetParam("id", lbRule.Id)
+	p.SetParam("networkids", networkIDs)
+	if err := lb.client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, nil); err != nil {
+		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Id, lb.customAssignNetworksCommand, err)
+	}
 	return nil
 }
 
