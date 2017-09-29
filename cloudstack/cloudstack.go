@@ -42,6 +42,9 @@ type CSConfig struct {
 		ServiceLabel string `gcfg:"service-label"`
 		NodeLabel    string `gcfg:"node-label"`
 	}
+	Command struct {
+		AssociateIP string `gcfg:"associate-ip"`
+	} `gcfg:"custom-command"`
 }
 
 // CSCloud is an implementation of Interface for CloudStack.
@@ -53,6 +56,9 @@ type CSCloud struct {
 	// Labels used to match services to nodes
 	serviceLabel string
 	nodeLabel    string
+
+	// Custom command to be used to associate an IP to a LB
+	customAssociateIPCommand string
 }
 
 func init() {
@@ -83,10 +89,11 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 // newCSCloud creates a new instance of CSCloud.
 func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 	cs := &CSCloud{
-		projectID:    cfg.Global.ProjectID,
-		zone:         cfg.Global.Zone,
-		serviceLabel: cfg.Global.ServiceLabel,
-		nodeLabel:    cfg.Global.NodeLabel,
+		projectID:                cfg.Global.ProjectID,
+		zone:                     cfg.Global.Zone,
+		serviceLabel:             cfg.Global.ServiceLabel,
+		nodeLabel:                cfg.Global.NodeLabel,
+		customAssociateIPCommand: cfg.Command.AssociateIP,
 	}
 
 	if cfg.Global.APIURL != "" && cfg.Global.APIKey != "" && cfg.Global.SecretKey != "" {

@@ -27,7 +27,7 @@ import (
 )
 
 type loadBalancer struct {
-	*cloudstack.CloudStackClient
+	*CSCloud
 
 	name      string
 	algorithm string
@@ -177,10 +177,10 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 	}
 
 	for _, lbRule := range lb.rules {
-		p := lb.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lbRule.Id)
+		p := cs.client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lbRule.Id)
 
 		// Retrieve all VMs currently associated to this load balancer rule.
-		l, err := lb.LoadBalancer.ListLoadBalancerRuleInstances(p)
+		l, err := cs.client.LoadBalancer.ListLoadBalancerRuleInstances(p)
 		if err != nil {
 			return fmt.Errorf("error retrieving associated instances: %v", err)
 		}
@@ -236,10 +236,10 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 // getLoadBalancer retrieves the IP address and ID and all the existing rules it can find.
 func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 	lb := &loadBalancer{
-		CloudStackClient: cs.client,
-		name:             cloudprovider.GetLoadBalancerName(service),
-		projectID:        cs.projectID,
-		rules:            make(map[string]*cloudstack.LoadBalancerRule),
+		CSCloud:   cs,
+		name:      cloudprovider.GetLoadBalancerName(service),
+		projectID: cs.projectID,
+		rules:     make(map[string]*cloudstack.LoadBalancerRule),
 	}
 
 	p := cs.client.LoadBalancer.NewListLoadBalancerRulesParams()
@@ -345,7 +345,7 @@ func (lb *loadBalancer) getLoadBalancerIP(loadBalancerIP string) error {
 func (lb *loadBalancer) getPublicIPAddress(loadBalancerIP string) error {
 	glog.V(4).Infof("Retrieve load balancer IP details: %v", loadBalancerIP)
 
-	p := lb.Address.NewListPublicIpAddressesParams()
+	p := lb.client.Address.NewListPublicIpAddressesParams()
 	p.SetIpaddress(loadBalancerIP)
 	p.SetListall(true)
 
@@ -353,7 +353,7 @@ func (lb *loadBalancer) getPublicIPAddress(loadBalancerIP string) error {
 		p.SetProjectid(lb.projectID)
 	}
 
-	l, err := lb.Address.ListPublicIpAddresses(p)
+	l, err := lb.client.Address.ListPublicIpAddresses(p)
 	if err != nil {
 		return fmt.Errorf("error retrieving IP address: %v", err)
 	}
@@ -373,7 +373,7 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	glog.V(4).Infof("Allocate new IP for load balancer: %v", lb.name)
 	// If a network belongs to a VPC, the IP address needs to be associated with
 	// the VPC instead of with the network.
-	network, count, err := lb.Network.GetNetworkByID(lb.networkID, cloudstack.WithProject(lb.projectID))
+	network, count, err := lb.client.Network.GetNetworkByID(lb.networkID, cloudstack.WithProject(lb.projectID))
 	if err != nil {
 		if count == 0 {
 			return fmt.Errorf("could not find network %v", lb.networkID)
@@ -381,35 +381,37 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		return fmt.Errorf("error retrieving network: %v", err)
 	}
 
-	p := lb.Address.NewAssociateIpAddressParams()
-
+	pc := &cloudstack.CustomServiceParams{}
 	if network.Vpcid != "" {
-		p.SetVpcid(network.Vpcid)
+		pc.SetParam("vpcid", network.Vpcid)
 	} else {
-		p.SetNetworkid(lb.networkID)
+		pc.SetParam("networkid", lb.networkID)
 	}
-
 	if lb.projectID != "" {
-		p.SetProjectid(lb.projectID)
+		pc.SetParam("projectid", lb.projectID)
 	}
 
-	// Associate a new IP address
-	r, err := lb.Address.AssociateIpAddress(p)
+	var result map[string]string
+	associateCommand := lb.CSCloud.customAssociateIPCommand
+	if associateCommand == "" {
+		associateCommand = "associateIpAddress"
+	}
+	err = lb.client.Custom.CustomRequest(associateCommand, pc, &result)
 	if err != nil {
-		return fmt.Errorf("error associating new IP address: %v", err)
+		return fmt.Errorf("error associate new IP address using endpoint %q: %v", associateCommand, err)
 	}
 
-	lb.ipAddr = r.Ipaddress
-	lb.ipAddrID = r.Id
+	lb.ipAddr = result["Ipaddress"]
+	lb.ipAddrID = result["id"]
 
 	return nil
 }
 
 // releasePublicIPAddress releases an associated IP.
 func (lb *loadBalancer) releaseLoadBalancerIP() error {
-	p := lb.Address.NewDisassociateIpAddressParams(lb.ipAddrID)
+	p := lb.client.Address.NewDisassociateIpAddressParams(lb.ipAddrID)
 
-	if _, err := lb.Address.DisassociateIpAddress(p); err != nil {
+	if _, err := lb.client.Address.DisassociateIpAddress(p); err != nil {
 		return fmt.Errorf("error releasing load balancer IP %v: %v", lb.ipAddr, err)
 	}
 
@@ -441,16 +443,16 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, port v1.Service
 func (lb *loadBalancer) updateLoadBalancerRule(lbRuleName string) error {
 	lbRule := lb.rules[lbRuleName]
 
-	p := lb.LoadBalancer.NewUpdateLoadBalancerRuleParams(lbRule.Id)
+	p := lb.client.LoadBalancer.NewUpdateLoadBalancerRuleParams(lbRule.Id)
 	p.SetAlgorithm(lb.algorithm)
 
-	_, err := lb.LoadBalancer.UpdateLoadBalancerRule(p)
+	_, err := lb.client.LoadBalancer.UpdateLoadBalancerRule(p)
 	return err
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
 func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.ServicePort) (*cloudstack.LoadBalancerRule, error) {
-	p := lb.LoadBalancer.NewCreateLoadBalancerRuleParams(
+	p := lb.client.LoadBalancer.NewCreateLoadBalancerRuleParams(
 		lb.algorithm,
 		lbRuleName,
 		int(port.NodePort),
@@ -473,7 +475,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 	p.SetOpenfirewall(false)
 
 	// Create a new load balancer rule.
-	r, err := lb.LoadBalancer.CreateLoadBalancerRule(p)
+	r, err := lb.client.LoadBalancer.CreateLoadBalancerRule(p)
 	if err != nil {
 		return nil, fmt.Errorf("error creating load balancer rule %v: %v", lbRuleName, err)
 	}
@@ -495,9 +497,9 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 
 // deleteLoadBalancerRule deletes a load balancer rule.
 func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRule) error {
-	p := lb.LoadBalancer.NewDeleteLoadBalancerRuleParams(lbRule.Id)
+	p := lb.client.LoadBalancer.NewDeleteLoadBalancerRuleParams(lbRule.Id)
 
-	if _, err := lb.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
+	if _, err := lb.client.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error deleting load balancer rule %v: %v", lbRule.Name, err)
 	}
 
@@ -509,10 +511,10 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRu
 
 // assignHostsToRule assigns hosts to a load balancer rule.
 func (lb *loadBalancer) assignHostsToRule(lbRule *cloudstack.LoadBalancerRule, hostIDs []string) error {
-	p := lb.LoadBalancer.NewAssignToLoadBalancerRuleParams(lbRule.Id)
+	p := lb.client.LoadBalancer.NewAssignToLoadBalancerRuleParams(lbRule.Id)
 	p.SetVirtualmachineids(hostIDs)
 
-	if _, err := lb.LoadBalancer.AssignToLoadBalancerRule(p); err != nil {
+	if _, err := lb.client.LoadBalancer.AssignToLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error assigning hosts to load balancer rule %v: %v", lbRule.Name, err)
 	}
 
@@ -521,10 +523,10 @@ func (lb *loadBalancer) assignHostsToRule(lbRule *cloudstack.LoadBalancerRule, h
 
 // removeHostsFromRule removes hosts from a load balancer rule.
 func (lb *loadBalancer) removeHostsFromRule(lbRule *cloudstack.LoadBalancerRule, hostIDs []string) error {
-	p := lb.LoadBalancer.NewRemoveFromLoadBalancerRuleParams(lbRule.Id)
+	p := lb.client.LoadBalancer.NewRemoveFromLoadBalancerRuleParams(lbRule.Id)
 	p.SetVirtualmachineids(hostIDs)
 
-	if _, err := lb.LoadBalancer.RemoveFromLoadBalancerRule(p); err != nil {
+	if _, err := lb.client.LoadBalancer.RemoveFromLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error removing hosts from load balancer rule %v: %v", lbRule.Name, err)
 	}
 
