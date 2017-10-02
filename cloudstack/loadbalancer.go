@@ -85,6 +85,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		return nil, err
 	}
 
+	glog.V(4).Infof("Ensuring Load Balancer: %+v", lb)
+
 	if !lb.hasLoadBalancerIP() {
 		// Create or retrieve the load balancer IP.
 		if errLB := lb.getLoadBalancerIP(service.Spec.LoadBalancerIP); errLB != nil {
