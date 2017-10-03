@@ -107,8 +107,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	glog.V(4).Infof("Load balancer %v is associated with IP %v", lb.name, lb.ipAddr)
 
 	for _, port := range service.Spec.Ports {
-		// All ports have their own load balancer rule, so add the port to lbName to keep the names unique.
-		lbRuleName := fmt.Sprintf("%s-%d", lb.name, port.Port)
+		lbRuleName := lb.name
 
 		// If the load balancer rule exists and is up-to-date, we move on to the next rule.
 		exists, needsUpdate, err := lb.checkLoadBalancerRule(lbRuleName, port)
