@@ -285,6 +285,12 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, error) {
 	hostNames := map[string]bool{}
 	for _, node := range nodes {
+		if cs.nodeNameLabel != "" {
+			if name, ok := node.Labels[cs.nodeNameLabel]; ok {
+				hostNames[name] = true
+			}
+			continue
+		}
 		hostNames[node.Name] = true
 	}
 

@@ -33,14 +33,15 @@ const ProviderName = "custom-cloudstack"
 // CSConfig wraps the config for the CloudStack cloud provider.
 type CSConfig struct {
 	Global struct {
-		APIURL       string `gcfg:"api-url"`
-		APIKey       string `gcfg:"api-key"`
-		SecretKey    string `gcfg:"secret-key"`
-		SSLNoVerify  bool   `gcfg:"ssl-no-verify"`
-		ProjectID    string `gcfg:"project-id"`
-		Zone         string `gcfg:"zone"`
-		ServiceLabel string `gcfg:"service-label"`
-		NodeLabel    string `gcfg:"node-label"`
+		APIURL             string `gcfg:"api-url"`
+		APIKey             string `gcfg:"api-key"`
+		SecretKey          string `gcfg:"secret-key"`
+		SSLNoVerify        bool   `gcfg:"ssl-no-verify"`
+		ProjectID          string `gcfg:"project-id"`
+		Zone               string `gcfg:"zone"`
+		ServiceFilterLabel string `gcfg:"service-label"`
+		NodeFilterLabel    string `gcfg:"node-label"`
+		NodeNameLabel      string `gcfg:"node-name-label"`
 	}
 	Command struct {
 		AssociateIP    string `gcfg:"associate-ip"`
@@ -57,6 +58,9 @@ type CSCloud struct {
 	// Labels used to match services to nodes
 	serviceLabel string
 	nodeLabel    string
+
+	// Node label that contains the virtual machine name used to match with cloudstack
+	nodeNameLabel string
 
 	// Custom command to be used to associate an IP to a LB
 	customAssociateIPCommand string
@@ -95,8 +99,9 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 	cs := &CSCloud{
 		projectID:                cfg.Global.ProjectID,
 		zone:                     cfg.Global.Zone,
-		serviceLabel:             cfg.Global.ServiceLabel,
-		nodeLabel:                cfg.Global.NodeLabel,
+		serviceLabel:             cfg.Global.ServiceFilterLabel,
+		nodeLabel:                cfg.Global.NodeFilterLabel,
+		nodeNameLabel:            cfg.Global.NodeNameLabel,
 		customAssociateIPCommand: cfg.Command.AssociateIP,
 	}
 
