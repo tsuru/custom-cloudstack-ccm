@@ -406,6 +406,9 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	if lb.projectID != "" {
 		pc.SetParam("projectid", lb.projectID)
 	}
+	if lb.lbEnvironmentID != "" {
+		pc.SetParam("lbenvironmentid", lb.lbEnvironmentID)
+	}
 
 	var result map[string]string
 	associateCommand := lb.CSCloud.customAssociateIPCommand

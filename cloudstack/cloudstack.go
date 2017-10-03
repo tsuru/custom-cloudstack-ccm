@@ -42,6 +42,7 @@ type CSConfig struct {
 		ServiceFilterLabel string `gcfg:"service-label"`
 		NodeFilterLabel    string `gcfg:"node-label"`
 		NodeNameLabel      string `gcfg:"node-name-label"`
+		LBEnvironmentID    string `gcfg:"lb-envinronment-id"`
 	}
 	Command struct {
 		AssociateIP    string `gcfg:"associate-ip"`
@@ -64,6 +65,7 @@ type CSCloud struct {
 
 	// Custom command to be used to associate an IP to a LB
 	customAssociateIPCommand string
+	lbEnvironmentID          string
 
 	// Custom command to be used to assign multiple networks to a LB
 	customAssignNetworksCommand string
@@ -98,6 +100,7 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 	cs := &CSCloud{
 		projectID:                cfg.Global.ProjectID,
+		lbEnvironmentID:          cfg.Global.LBEnvironmentID,
 		zone:                     cfg.Global.Zone,
 		serviceLabel:             cfg.Global.ServiceFilterLabel,
 		nodeLabel:                cfg.Global.NodeFilterLabel,
