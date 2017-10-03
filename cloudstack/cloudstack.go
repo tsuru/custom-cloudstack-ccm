@@ -42,7 +42,7 @@ type CSConfig struct {
 		ServiceFilterLabel string `gcfg:"service-label"`
 		NodeFilterLabel    string `gcfg:"node-label"`
 		NodeNameLabel      string `gcfg:"node-name-label"`
-		LBEnvironmentID    string `gcfg:"lb-envinronment-id"`
+		LBEnvironmentID    string `gcfg:"lb-environment-id"`
 	}
 	Command struct {
 		AssociateIP    string `gcfg:"associate-ip"`
