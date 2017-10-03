@@ -247,7 +247,7 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 	lb := &loadBalancer{
 		CSCloud:   cs,
-		name:      cloudprovider.GetLoadBalancerName(service),
+		name:      cs.getLoadBalancerName(*service),
 		projectID: cs.projectID,
 		rules:     make(map[string]*cloudstack.LoadBalancerRule),
 	}
@@ -341,6 +341,13 @@ func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Servic
 		filteredNodes = append(filteredNodes, nodes[i])
 	}
 	return filteredNodes
+}
+
+func (cs *CSCloud) getLoadBalancerName(service v1.Service) string {
+	if cs.lbDomain == "" {
+		return cloudprovider.GetLoadBalancerName(&service)
+	}
+	return fmt.Sprintf("%s.%s", service.Name, cs.lbDomain)
 }
 
 // hasLoadBalancerIP returns true if we have a load balancer address and ID.
