@@ -80,6 +80,10 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes available to add to load balancer")
+	}
+
 	lb.hostIDs, lb.networkIDs, err = cs.extractIDs(nodes)
 	if err != nil {
 		return nil, err
