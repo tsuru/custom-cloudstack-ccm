@@ -30,11 +30,6 @@
   name = "github.com/kardianos/osext"
 
 [[constraint]]
-  name = "github.com/xanzy/go-cloudstack"
-  source = "github.com/andrestc/go-cloudstack"
-  branch = "master"
-
-[[constraint]]
   revision = "087d1a2efeb6296f04bb0f54e7af9890052aa6d7"
   name = "k8s.io/apiserver"
 
