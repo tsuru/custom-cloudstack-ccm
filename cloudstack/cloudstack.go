@@ -42,6 +42,7 @@ type CSConfig struct {
 		ServiceFilterLabel string `gcfg:"service-label"`
 		NodeFilterLabel    string `gcfg:"node-label"`
 		NodeNameLabel      string `gcfg:"node-name-label"`
+		ProjectIDLabel     string `gcfg:"project-id-label"`
 		LBEnvironmentID    string `gcfg:"lb-environment-id"`
 		LBDomain           string `gcfg:"lb-domain"`
 	}
@@ -54,7 +55,7 @@ type CSConfig struct {
 // CSCloud is an implementation of Interface for CloudStack.
 type CSCloud struct {
 	client    *cloudstack.CloudStackClient
-	projectID string // If non-"", all resources will be created within this project
+	projectID string // If non-"" and nodeProjectIDLabel is not set, all resources will be created within this project
 	zone      string
 
 	// Labels used to match services to nodes
@@ -63,6 +64,9 @@ type CSCloud struct {
 
 	// Node label that contains the virtual machine name used to match with cloudstack
 	nodeNameLabel string
+
+	// label that contains the project ID of the given resource
+	projectIDLabel string
 
 	// Custom command to be used to associate an IP to a LB
 	customAssociateIPCommand string
@@ -108,6 +112,7 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		serviceLabel:             cfg.Global.ServiceFilterLabel,
 		nodeLabel:                cfg.Global.NodeFilterLabel,
 		nodeNameLabel:            cfg.Global.NodeNameLabel,
+		projectIDLabel:           cfg.Global.ProjectIDLabel,
 		customAssociateIPCommand: cfg.Command.AssociateIP,
 	}
 

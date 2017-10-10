@@ -22,6 +22,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
@@ -84,7 +85,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		return nil, fmt.Errorf("no nodes available to add to load balancer")
 	}
 
-	lb.hostIDs, lb.networkIDs, err = cs.extractIDs(nodes)
+	lb.hostIDs, lb.networkIDs, lb.projectID, err = cs.extractIDs(nodes)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +165,9 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	status = &v1.LoadBalancerStatus{}
 	status.Ingress = []v1.LoadBalancerIngress{{IP: lb.ipAddr}}
 
+	if lb.projectID != "" && service.Labels[cs.projectIDLabel] == "" {
+		service.Labels[cs.projectIDLabel] = lb.projectID
+	}
 	return status, nil
 }
 
@@ -179,7 +183,7 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
-	lb.hostIDs, lb.networkIDs, err = cs.extractIDs(nodes)
+	lb.hostIDs, lb.networkIDs, lb.projectID, err = cs.extractIDs(nodes)
 	if err != nil {
 		return err
 	}
@@ -248,10 +252,11 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 
 // getLoadBalancer retrieves the IP address and ID and all the existing rules it can find.
 func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
+	projectID := cs.projectIDForObject(service.ObjectMeta)
 	lb := &loadBalancer{
 		CSCloud:   cs,
 		name:      cs.getLoadBalancerName(*service),
-		projectID: cs.projectID,
+		projectID: projectID,
 		rules:     make(map[string]*cloudstack.LoadBalancerRule),
 	}
 
@@ -259,8 +264,8 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 	p.SetKeyword(lb.name)
 	p.SetListall(true)
 
-	if cs.projectID != "" {
-		p.SetProjectid(cs.projectID)
+	if projectID != "" {
+		p.SetProjectid(projectID)
 	}
 
 	l, err := cs.client.LoadBalancer.ListLoadBalancerRules(p)
@@ -284,8 +289,8 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 	return lb, nil
 }
 
-// extractIDs extracts the VM ID for each node and their unique network IDs
-func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, error) {
+// extractIDs extracts the VM ID for each node, their unique network IDs and project ID
+func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, error) {
 	hostNames := map[string]bool{}
 	for _, node := range nodes {
 		if cs.nodeNameLabel != "" {
@@ -300,13 +305,15 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, error) {
 	p := cs.client.VirtualMachine.NewListVirtualMachinesParams()
 	p.SetListall(true)
 
-	if cs.projectID != "" {
-		p.SetProjectid(cs.projectID)
+	projectID := cs.projectIDForObject(nodes[0].ObjectMeta)
+
+	if projectID != "" {
+		p.SetProjectid(projectID)
 	}
 
 	l, err := cs.client.VirtualMachine.ListVirtualMachines(p)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error retrieving list of hosts: %v", err)
+		return nil, nil, "", fmt.Errorf("error retrieving list of hosts: %v", err)
 	}
 
 	var hostIDs []string
@@ -327,7 +334,20 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, error) {
 		networkIDs = append(networkIDs, vm.Nic[0].Networkid)
 	}
 
-	return hostIDs, networkIDs, nil
+	return hostIDs, networkIDs, projectID, nil
+}
+
+func (cs *CSCloud) projectIDForObject(obj metav1.ObjectMeta) string {
+	projectID := cs.projectID
+	if cs.projectIDLabel != "" {
+		if l, ok := obj.Labels[cs.projectIDLabel]; ok {
+			projectID = l
+		}
+		if l, ok := obj.Annotations[cs.projectIDLabel]; ok {
+			projectID = l
+		}
+	}
+	return projectID
 }
 
 func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Service) []*v1.Node {
