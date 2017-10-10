@@ -90,6 +90,71 @@ func TestReadConfig(t *testing.T) {
 	}
 }
 
+func TestReadConfigFallbackSecretsToEnvs(t *testing.T) {
+	_, err := readConfig(nil)
+	if err != nil {
+		t.Fatalf("Should not return an error when no config is provided: %v", err)
+	}
+	os.Setenv("CLOUDSTACK_API_URL", "https://cloudstack.url")
+	os.Setenv("CLOUDSTACK_API_KEY", "a-valid-api-key")
+	os.Setenv("CLOUDSTACK_SECRET_KEY", "a-valid-secret-key")
+	defer os.Unsetenv("CLOUDSTACK_API_URL")
+	defer os.Unsetenv("CLOUDSTACK_API_KEY")
+	defer os.Unsetenv("CLOUDSTACK_SECRET_KEY")
+
+	cfg, err := readConfig(strings.NewReader(`
+ [Global]
+ ssl-no-verify	= true
+ project-id			= a-valid-project-id
+ lb-environment-id = 999
+ lb-domain = cs-router.com
+ service-label = tsuru.io/app-pool
+ node-label = tsuru.io/pool
+ node-name-label = tsuru.io/iaas-id
+ 
+ [custom-command]
+ associate-ip = acquireIP
+ assign-networks = assignNetworks
+ `))
+	if err != nil {
+		t.Fatalf("Should succeed when a valid config is provided: %v", err)
+	}
+
+	if cfg.Global.APIURL != "https://cloudstack.url" {
+		t.Errorf("incorrect api-url: %s", cfg.Global.APIURL)
+	}
+	if cfg.Global.APIKey != "a-valid-api-key" {
+		t.Errorf("incorrect api-key: %s", cfg.Global.APIKey)
+	}
+	if cfg.Global.SecretKey != "a-valid-secret-key" {
+		t.Errorf("incorrect secret-key: %s", cfg.Global.SecretKey)
+	}
+	if !cfg.Global.SSLNoVerify {
+		t.Errorf("incorrect ssl-no-verify: %t", cfg.Global.SSLNoVerify)
+	}
+	if cfg.Global.LBEnvironmentID != "999" {
+		t.Errorf("incorrect lb-environment-id: %s", cfg.Global.LBEnvironmentID)
+	}
+	if cfg.Global.LBDomain != "cs-router.com" {
+		t.Errorf("incorrect lb-domain: %s", cfg.Global.LBDomain)
+	}
+	if cfg.Global.ServiceFilterLabel != "tsuru.io/app-pool" {
+		t.Errorf("incorrect service-label: %s", cfg.Global.ServiceFilterLabel)
+	}
+	if cfg.Global.NodeFilterLabel != "tsuru.io/pool" {
+		t.Errorf("incorrect node-label: %s", cfg.Global.NodeFilterLabel)
+	}
+	if cfg.Global.NodeNameLabel != "tsuru.io/iaas-id" {
+		t.Errorf("incorrect node-name-label: %s", cfg.Global.NodeNameLabel)
+	}
+	if cfg.Command.AssociateIP != "acquireIP" {
+		t.Errorf("incorrect associate-ip: %s", cfg.Command.AssociateIP)
+	}
+	if cfg.Command.AssignNetworks != "assignNetworks" {
+		t.Errorf("incorrect assign-networks: %s", cfg.Command.AssignNetworks)
+	}
+}
+
 // This allows acceptance testing against an existing CloudStack environment.
 func configFromEnv() (*CSConfig, bool) {
 	cfg := &CSConfig{}

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	"gopkg.in/gcfg.v1"
@@ -100,6 +101,16 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 
 	if err := gcfg.ReadInto(cfg, config); err != nil {
 		return nil, fmt.Errorf("could not parse cloud provider config: %v", err)
+	}
+
+	if cfg.Global.APIURL == "" {
+		cfg.Global.APIURL = os.Getenv("CLOUDSTACK_API_URL")
+	}
+	if cfg.Global.APIKey == "" {
+		cfg.Global.APIKey = os.Getenv("CLOUDSTACK_API_KEY")
+	}
+	if cfg.Global.SecretKey == "" {
+		cfg.Global.SecretKey = os.Getenv("CLOUDSTACK_SECRET_KEY")
 	}
 
 	return cfg, nil
