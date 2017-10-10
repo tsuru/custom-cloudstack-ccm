@@ -56,7 +56,7 @@ type CSConfig struct {
 // CSCloud is an implementation of Interface for CloudStack.
 type CSCloud struct {
 	client    *cloudstack.CloudStackClient
-	projectID string // If non-"" and nodeProjectIDLabel is not set, all resources will be created within this project
+	projectID string // If non-"" and projectIDLabel is not set, all resources will be created within this project
 	zone      string
 
 	kubeClient kubernetes.Interface
