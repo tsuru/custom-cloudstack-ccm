@@ -33,48 +33,6 @@ type node struct {
 	name      string
 }
 
-func (cs *CSCloud) getNodeByName(name string) (*node, error) {
-	kubeNode, err := cs.kubeClient.CoreV1().Nodes().Get(name, metav1.GetOptions{IncludeUninitialized: true})
-	if err != nil {
-		return nil, err
-	}
-	n := &node{
-		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
-		name:      kubeNode.Name,
-	}
-	if cs.nodeNameLabel != "" {
-		if name, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
-			n.name = name
-		}
-	}
-	return n, nil
-}
-
-func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
-	if cs.nodeNameLabel == "" {
-		return cs.getNodeByName(id)
-	}
-	kubeNodes, err := cs.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{
-		LabelSelector:        fmt.Sprintf("%s=%s", cs.nodeNameLabel, id),
-		IncludeUninitialized: true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list nodes: %v", err)
-	}
-	if len(kubeNodes.Items) > 0 {
-		return nil, fmt.Errorf("multiple nodes found for provider id %s", id)
-	}
-	if len(kubeNodes.Items) == 0 {
-		return nil, fmt.Errorf("no node found for provider id %s", id)
-	}
-	kubeNode := kubeNodes.Items[0]
-	n := &node{
-		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
-		name:      kubeNode.Labels[cs.nodeNameLabel],
-	}
-	return n, nil
-}
-
 // NodeAddresses returns the addresses of the specified instance.
 func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) {
 	node, err := cs.getNodeByName(string(name))
@@ -228,4 +186,46 @@ func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (cs *CSCloud) getNodeByName(name string) (*node, error) {
+	kubeNode, err := cs.kubeClient.CoreV1().Nodes().Get(name, metav1.GetOptions{IncludeUninitialized: true})
+	if err != nil {
+		return nil, err
+	}
+	n := &node{
+		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
+		name:      kubeNode.Name,
+	}
+	if cs.nodeNameLabel != "" {
+		if name, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
+			n.name = name
+		}
+	}
+	return n, nil
+}
+
+func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
+	if cs.nodeNameLabel == "" {
+		return cs.getNodeByName(id)
+	}
+	kubeNodes, err := cs.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{
+		LabelSelector:        fmt.Sprintf("%s=%s", cs.nodeNameLabel, id),
+		IncludeUninitialized: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %v", err)
+	}
+	if len(kubeNodes.Items) > 0 {
+		return nil, fmt.Errorf("multiple nodes found for provider id %s", id)
+	}
+	if len(kubeNodes.Items) == 0 {
+		return nil, fmt.Errorf("no node found for provider id %s", id)
+	}
+	kubeNode := kubeNodes.Items[0]
+	n := &node{
+		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
+		name:      kubeNode.Labels[cs.nodeNameLabel],
+	}
+	return n, nil
 }
