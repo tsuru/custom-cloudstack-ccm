@@ -23,6 +23,7 @@ import (
 
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	"gopkg.in/gcfg.v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	"k8s.io/kubernetes/pkg/controller"
 )
@@ -57,6 +58,8 @@ type CSCloud struct {
 	client    *cloudstack.CloudStackClient
 	projectID string // If non-"" and nodeProjectIDLabel is not set, all resources will be created within this project
 	zone      string
+
+	kubeClient kubernetes.Interface
 
 	// Labels used to match services to nodes
 	serviceLabel string
@@ -128,7 +131,9 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 }
 
 // Initialize passes a Kubernetes clientBuilder interface to the cloud provider
-func (cs *CSCloud) Initialize(clientBuilder controller.ControllerClientBuilder) {}
+func (cs *CSCloud) Initialize(clientBuilder controller.ControllerClientBuilder) {
+	cs.kubeClient = clientBuilder.ClientGoClientOrDie(ProviderName)
+}
 
 // LoadBalancer returns an implementation of LoadBalancer for CloudStack.
 func (cs *CSCloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {

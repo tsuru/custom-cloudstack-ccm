@@ -22,17 +22,68 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
 
+type node struct {
+	projectID string
+	name      string
+}
+
+func (cs *CSCloud) getNodeByName(name string) (*node, error) {
+	kubeNode, err := cs.kubeClient.CoreV1().Nodes().Get(name, metav1.GetOptions{IncludeUninitialized: true})
+	if err != nil {
+		return nil, err
+	}
+	n := &node{
+		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
+		name:      kubeNode.Name,
+	}
+	if cs.nodeNameLabel != "" {
+		if name, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
+			n.name = name
+		}
+	}
+	return n, nil
+}
+
+func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
+	if cs.nodeNameLabel == "" {
+		return cs.getNodeByName(id)
+	}
+	kubeNodes, err := cs.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{
+		LabelSelector:        fmt.Sprintf("%s=%s", cs.nodeNameLabel, id),
+		IncludeUninitialized: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %v", err)
+	}
+	if len(kubeNodes.Items) > 0 {
+		return nil, fmt.Errorf("multiple nodes found for provider id %s", id)
+	}
+	if len(kubeNodes.Items) == 0 {
+		return nil, fmt.Errorf("no node found for provider id %s", id)
+	}
+	kubeNode := kubeNodes.Items[0]
+	n := &node{
+		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
+		name:      kubeNode.Labels[cs.nodeNameLabel],
+	}
+	return n, nil
+}
+
 // NodeAddresses returns the addresses of the specified instance.
 func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) {
-	// nao pode pegar so pelo nome
+	node, err := cs.getNodeByName(string(name))
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
+	}
 	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
-		string(name),
-		cloudstack.WithProject(cs.projectID),
+		node.name,
+		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
 		if count == 0 {
@@ -46,9 +97,13 @@ func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) 
 
 // NodeAddressesByProviderID returns the addresses of the specified instance.
 func (cs *CSCloud) NodeAddressesByProviderID(providerID string) ([]v1.NodeAddress, error) {
+	node, err := cs.getNodeByProviderID(providerID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
+	}
 	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByID(
 		providerID,
-		cloudstack.WithProject(cs.projectID),
+		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
 		if count == 0 {
@@ -87,9 +142,13 @@ func (cs *CSCloud) ExternalID(name types.NodeName) (string, error) {
 
 // InstanceID returns the cloud provider ID of the specified instance.
 func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
+	node, err := cs.getNodeByName(string(name))
+	if err != nil {
+		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
+	}
 	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
-		string(name),
-		cloudstack.WithProject(cs.projectID),
+		node.name,
+		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
 		if count == 0 {
@@ -103,9 +162,13 @@ func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
 
 // InstanceType returns the type of the specified instance.
 func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
+	node, err := cs.getNodeByName(string(name))
+	if err != nil {
+		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
+	}
 	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
-		string(name),
-		cloudstack.WithProject(cs.projectID),
+		node.name,
+		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
 		if count == 0 {
@@ -119,9 +182,13 @@ func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
 
 // InstanceTypeByProviderID returns the type of the specified instance.
 func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
+	node, err := cs.getNodeByProviderID(providerID)
+	if err != nil {
+		return "", fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
+	}
 	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByID(
 		providerID,
-		cloudstack.WithProject(cs.projectID),
+		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
 		if count == 0 {
@@ -145,9 +212,13 @@ func (cs *CSCloud) CurrentNodeName(hostname string) (types.NodeName, error) {
 
 // InstanceExistsByProviderID returns if the instance still exists.
 func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
+	node, err := cs.getNodeByProviderID(providerID)
+	if err != nil {
+		return false, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
+	}
 	_, count, err := cs.client.VirtualMachine.GetVirtualMachineByID(
 		providerID,
-		cloudstack.WithProject(cs.projectID),
+		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
 		if count == 0 {
