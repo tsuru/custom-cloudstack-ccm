@@ -136,7 +136,11 @@ func (cs *CSCloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
 
 // Instances returns an implementation of Instances for CloudStack.
 func (cs *CSCloud) Instances() (cloudprovider.Instances, bool) {
-	return nil, false
+	if cs.client == nil {
+		return nil, false
+	}
+
+	return cs, false
 }
 
 // Zones returns an implementation of Zones for CloudStack.
