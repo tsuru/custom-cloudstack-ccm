@@ -35,6 +35,7 @@ type node struct {
 
 // NodeAddresses returns the addresses of the specified instance.
 func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) {
+	glog.V(4).Infof("NodeAddresses(%v)", name)
 	node, err := cs.getNodeByName(string(name))
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
@@ -55,6 +56,7 @@ func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) 
 
 // NodeAddressesByProviderID returns the addresses of the specified instance.
 func (cs *CSCloud) NodeAddressesByProviderID(providerID string) ([]v1.NodeAddress, error) {
+	glog.V(4).Infof("NodeAddressesByProviderID(%v)", providerID)
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
@@ -95,11 +97,13 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 
 // ExternalID returns the cloud provider ID of the specified instance (deprecated).
 func (cs *CSCloud) ExternalID(name types.NodeName) (string, error) {
+	glog.V(4).Infof("ExternalID(%v)", name)
 	return cs.InstanceID(name)
 }
 
 // InstanceID returns the cloud provider ID of the specified instance.
 func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
+	glog.V(4).Infof("InstanceID(%v)", name)
 	node, err := cs.getNodeByName(string(name))
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
@@ -120,6 +124,7 @@ func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
 
 // InstanceType returns the type of the specified instance.
 func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
+	glog.V(4).Infof("InstanceType(%v)", name)
 	node, err := cs.getNodeByName(string(name))
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
@@ -140,6 +145,7 @@ func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
 
 // InstanceTypeByProviderID returns the type of the specified instance.
 func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
+	glog.V(4).Infof("InstanceTypeByProviderID(%v)", providerID)
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
@@ -160,16 +166,19 @@ func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
 
 // AddSSHKeyToAllInstances is currently not implemented.
 func (cs *CSCloud) AddSSHKeyToAllInstances(user string, keyData []byte) error {
+	glog.V(4).Infof("AddSSHKeyToAllInstances(%v, %v)", user, keyData)
 	return errors.New("AddSSHKeyToAllInstances not implemented")
 }
 
 // CurrentNodeName returns the name of the node we are currently running on.
 func (cs *CSCloud) CurrentNodeName(hostname string) (types.NodeName, error) {
+	glog.V(4).Infof("CurrentNodeName(%v)", hostname)
 	return types.NodeName(hostname), nil
 }
 
 // InstanceExistsByProviderID returns if the instance still exists.
 func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
+	glog.V(4).Infof("InstanceExistsByProviderID(%v)", providerID)
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
 		return false, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
