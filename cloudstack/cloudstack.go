@@ -161,7 +161,7 @@ func (cs *CSCloud) Instances() (cloudprovider.Instances, bool) {
 		return nil, false
 	}
 
-	return cs, false
+	return cs, true
 }
 
 // Zones returns an implementation of Zones for CloudStack.
