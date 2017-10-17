@@ -57,6 +57,9 @@ func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) 
 // NodeAddressesByProviderID returns the addresses of the specified instance.
 func (cs *CSCloud) NodeAddressesByProviderID(providerID string) ([]v1.NodeAddress, error) {
 	glog.V(4).Infof("NodeAddressesByProviderID(%v)", providerID)
+	if providerID == "" {
+		return nil, fmt.Errorf("empty providerID")
+	}
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
@@ -146,6 +149,9 @@ func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
 // InstanceTypeByProviderID returns the type of the specified instance.
 func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
 	glog.V(4).Infof("InstanceTypeByProviderID(%v)", providerID)
+	if providerID == "" {
+		return false, fmt.Errorf("empty providerID")
+	}
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
@@ -179,6 +185,9 @@ func (cs *CSCloud) CurrentNodeName(hostname string) (types.NodeName, error) {
 // InstanceExistsByProviderID returns if the instance still exists.
 func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
 	glog.V(4).Infof("InstanceExistsByProviderID(%v)", providerID)
+	if providerID == "" {
+		return false, fmt.Errorf("empty providerID")
+	}
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
 		return false, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
