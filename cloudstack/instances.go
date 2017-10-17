@@ -220,6 +220,7 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 			n.name = name
 		}
 	}
+	glog.V(4).Infof("getNodeByName(%v): found node: %v", name, n)
 	return n, nil
 }
 
