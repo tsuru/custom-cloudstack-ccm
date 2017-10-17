@@ -301,6 +301,9 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 			if name, ok := node.Labels[cs.nodeNameLabel]; ok {
 				hostNames[name] = true
 			}
+			if name, ok := node.Annotations[cs.nodeNameLabel]; ok {
+				hostNames[name] = true
+			}
 			continue
 		}
 		hostNames[node.Name] = true
