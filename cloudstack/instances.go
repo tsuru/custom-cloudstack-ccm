@@ -116,6 +116,7 @@ func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
 		cloudstack.WithProject(node.projectID),
 	)
 	if err != nil {
+		glog.V(4).Infof("Could not find VM for node %v: %v", node, err)
 		if count == 0 {
 			return "", cloudprovider.InstanceNotFound
 		}
