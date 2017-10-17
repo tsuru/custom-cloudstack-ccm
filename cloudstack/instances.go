@@ -150,7 +150,7 @@ func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
 func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
 	glog.V(4).Infof("InstanceTypeByProviderID(%v)", providerID)
 	if providerID == "" {
-		return false, fmt.Errorf("empty providerID")
+		return "", fmt.Errorf("empty providerID")
 	}
 	node, err := cs.getNodeByProviderID(providerID)
 	if err != nil {
