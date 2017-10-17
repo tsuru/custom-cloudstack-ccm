@@ -291,6 +291,10 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 
 // extractIDs extracts the VM ID for each node, their unique network IDs and project ID
 func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, error) {
+	if len(nodes) == 0 {
+		glog.V(4).Info("skipping extractIDs for empty node slice")
+		return nil, nil, "", nil
+	}
 	hostNames := map[string]bool{}
 	for _, node := range nodes {
 		if cs.nodeNameLabel != "" {
