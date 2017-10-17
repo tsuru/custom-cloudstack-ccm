@@ -216,8 +216,8 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 		name:      kubeNode.Name,
 	}
 	if cs.nodeNameLabel != "" {
-		if name, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
-			n.name = name
+		if nodeName, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
+			n.name = nodeName
 		}
 	}
 	glog.V(4).Infof("getNodeByName(%v): found node: %v", name, n)
