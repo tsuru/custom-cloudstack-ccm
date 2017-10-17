@@ -40,17 +40,13 @@ func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) 
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
 	}
-	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
-		node.name,
-		cloudstack.WithProject(node.projectID),
-	)
+	instance, err := cs.getInstanceForNode(node)
 	if err != nil {
-		if count == 0 {
-			return nil, cloudprovider.InstanceNotFound
+		if err == cloudprovider.InstanceNotFound {
+			return nil, err
 		}
 		return nil, fmt.Errorf("error retrieving node addresses: %v", err)
 	}
-
 	return cs.nodeAddresses(instance)
 }
 
@@ -111,18 +107,13 @@ func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
 	}
-	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
-		node.name,
-		cloudstack.WithProject(node.projectID),
-	)
+	instance, err := cs.getInstanceForNode(node)
 	if err != nil {
-		glog.V(4).Infof("Could not find VM for node %v: %v", node, err)
-		if count == 0 {
-			return "", cloudprovider.InstanceNotFound
+		if err == cloudprovider.InstanceNotFound {
+			return "", err
 		}
 		return "", fmt.Errorf("error retrieving instance ID: %v", err)
 	}
-
 	return instance.Id, nil
 }
 
@@ -133,17 +124,13 @@ func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
 	}
-	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
-		node.name,
-		cloudstack.WithProject(node.projectID),
-	)
+	instance, err := cs.getInstanceForNode(node)
 	if err != nil {
-		if count == 0 {
-			return "", cloudprovider.InstanceNotFound
+		if err == cloudprovider.InstanceNotFound {
+			return "", err
 		}
 		return "", fmt.Errorf("error retrieving instance type: %v", err)
 	}
-
 	return instance.Serviceofferingname, nil
 }
 
@@ -205,6 +192,22 @@ func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (cs *CSCloud) getInstanceForNode(n *node) (*cloudstack.VirtualMachine, error) {
+	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
+		n.name,
+		cloudstack.WithProject(n.projectID),
+	)
+	if err != nil {
+		glog.V(4).Infof("getInstanceForNode(%v): Could not find VM: %v", n, err)
+		if count == 0 {
+			return nil, cloudprovider.InstanceNotFound
+		}
+		return nil, fmt.Errorf("error instance for node %v: %v", n, err)
+	}
+	glog.V(4).Infof("getInstanceForNode(%v): Found instance %v", n, instance)
+	return instance, nil
 }
 
 func (cs *CSCloud) getNodeByName(name string) (*node, error) {
