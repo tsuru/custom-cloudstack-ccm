@@ -215,14 +215,9 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := &node{
-		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
-		name:      kubeNode.Name,
-	}
-	if cs.nodeNameLabel != "" {
-		if nodeName, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
-			n.name = nodeName
-		}
+	n, err := cs.newNode(kubeNode.ObjectMeta)
+	if err != nil {
+		return nil, err
 	}
 	glog.V(4).Infof("getNodeByName(%v): found node: %v", name, n)
 	return n, nil
@@ -245,10 +240,16 @@ func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
 	if len(kubeNodes.Items) == 0 {
 		return nil, fmt.Errorf("no node found for provider id %s", id)
 	}
-	kubeNode := kubeNodes.Items[0]
+	return cs.newNode(kubeNodes.Items[0].ObjectMeta)
+}
+
+func (cs *CSCloud) newNode(kubeNode metav1.ObjectMeta) (*node, error) {
 	n := &node{
-		projectID: cs.projectIDForObject(kubeNode.ObjectMeta),
+		projectID: cs.projectIDForObject(kubeNode),
 		name:      kubeNode.Labels[cs.nodeNameLabel],
+	}
+	if cs.projectIDLabel != "" && n.projectID == "" {
+		return nil, fmt.Errorf("projectID label %q not found in node %v", cs.projectIDLabel, n)
 	}
 	return n, nil
 }
