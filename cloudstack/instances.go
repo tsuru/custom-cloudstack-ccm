@@ -244,9 +244,18 @@ func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
 }
 
 func (cs *CSCloud) newNode(kubeNode metav1.ObjectMeta) (*node, error) {
+	name := kubeNode.Name
+	if cs.nodeNameLabel != "" {
+		if n, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
+			name = n
+		}
+		if n, ok := kubeNode.Annotations[cs.nodeNameLabel]; ok {
+			name = n
+		}
+	}
 	n := &node{
 		projectID: cs.projectIDForObject(kubeNode),
-		name:      kubeNode.Labels[cs.nodeNameLabel],
+		name:      name,
 	}
 	if cs.projectIDLabel != "" && n.projectID == "" {
 		return nil, fmt.Errorf("projectID label %q not found in node %v", cs.projectIDLabel, n)
