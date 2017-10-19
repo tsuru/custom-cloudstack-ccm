@@ -257,8 +257,5 @@ func (cs *CSCloud) newNode(kubeNode metav1.ObjectMeta) (*node, error) {
 		projectID: cs.projectIDForObject(kubeNode),
 		name:      name,
 	}
-	if cs.projectIDLabel != "" && n.projectID == "" {
-		return nil, fmt.Errorf("projectID label %q not found in node %v", cs.projectIDLabel, n)
-	}
 	return n, nil
 }
