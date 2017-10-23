@@ -457,9 +457,9 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		return fmt.Errorf("error associate new IP address using endpoint %q: %v", associateCommand, err)
 	}
 
-	lb.ipAddr = result["Ipaddress"]
+	lb.ipAddr = result["ipaddress"]
 	lb.ipAddrID = result["id"]
-
+	glog.V(4).Infof("Allocated IP %s for load balancer %s with name %v", lb.ipAddr, lb.ipAddrID, lb.name)
 	return nil
 }
 
