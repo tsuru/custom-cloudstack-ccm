@@ -471,17 +471,15 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		}
 		glog.V(4).Infof("Result: %s", string(rawAsync))
 		var asyncResult struct {
-			JobResult struct {
-				IPAddress struct {
-					IPAddress string `json:"ipaddress,omitempty"`
-				} `json:"ipaddress,omitempty"`
-			} `json:"jobresult,omitempty"`
+			IPAddress struct {
+				IPAddress string `json:"ipaddress,omitempty"`
+			} `json:"ipaddress,omitempty"`
 		}
 		err = json.Unmarshal(rawAsync, &asyncResult)
 		if err != nil {
 			return err
 		}
-		lb.ipAddr = asyncResult.JobResult.IPAddress.IPAddress
+		lb.ipAddr = asyncResult.IPAddress.IPAddress
 	}
 	glog.V(4).Infof("Allocated IP %s for load balancer %s with name %v", lb.ipAddr, lb.ipAddrID, lb.name)
 	return nil
