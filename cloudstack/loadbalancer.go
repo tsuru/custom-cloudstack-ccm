@@ -465,12 +465,23 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 
 // releasePublicIPAddress releases an associated IP.
 func (lb *loadBalancer) releaseLoadBalancerIP() error {
-	p := lb.client.Address.NewDisassociateIpAddressParams(lb.ipAddrID)
+	glog.V(4).Infof("Release IP %s (%s) for load balancer: %v", lb.ipAddr, lb.ipAddrID, lb.name)
 
-	if _, err := lb.client.Address.DisassociateIpAddress(p); err != nil {
-		return fmt.Errorf("error releasing load balancer IP %v: %v", lb.ipAddr, err)
+	pc := &cloudstack.CustomServiceParams{}
+	pc.SetParam("id", lb.ipAddrID)
+	if lb.projectID != "" {
+		pc.SetParam("projectid", lb.projectID)
 	}
 
+	disassociateCommand := lb.CSCloud.customDisassociateIPCommand
+	if disassociateCommand == "" {
+		disassociateCommand = "disassociateIpAddress"
+	}
+
+	err := lb.client.Custom.CustomRequest(disassociateCommand, pc, nil)
+	if err != nil {
+		return fmt.Errorf("error disassociate IP address using endpoint %q: %v", disassociateCommand, err)
+	}
 	return nil
 }
 

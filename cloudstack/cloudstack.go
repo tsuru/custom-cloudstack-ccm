@@ -50,6 +50,7 @@ type CSConfig struct {
 	}
 	Command struct {
 		AssociateIP    string `gcfg:"associate-ip"`
+		DisassociateIP string `gcfg:"disassociate-ip"`
 		AssignNetworks string `gcfg:"assign-networks"`
 	} `gcfg:"custom-command"`
 }
@@ -76,6 +77,9 @@ type CSCloud struct {
 	customAssociateIPCommand string
 	lbEnvironmentID          string
 	lbDomain                 string
+
+	// Custom command to be used to disassociate an IP from a LB
+	customDisassociateIPCommand string
 
 	// Custom command to be used to assign multiple networks to a LB
 	customAssignNetworksCommand string
