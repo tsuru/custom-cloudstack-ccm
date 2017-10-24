@@ -477,8 +477,8 @@ func (lb *loadBalancer) releaseLoadBalancerIP() error {
 	if disassociateCommand == "" {
 		disassociateCommand = "disassociateIpAddress"
 	}
-
-	err := lb.client.Custom.CustomRequest(disassociateCommand, pc, nil)
+	var data map[string]interface{}
+	err := lb.client.Custom.CustomRequest(disassociateCommand, pc, &data)
 	if err != nil {
 		return fmt.Errorf("error disassociate IP address using endpoint %q: %v", disassociateCommand, err)
 	}
