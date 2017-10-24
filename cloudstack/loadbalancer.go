@@ -17,8 +17,10 @@ limitations under the License.
 package cloudstack
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
@@ -459,6 +461,28 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 
 	lb.ipAddr = result["ipaddress"]
 	lb.ipAddrID = result["id"]
+	if jobid, ok := result["jobid"]; ok {
+		glog.V(4).Infof("Querying async job %s for load balancer %s ", jobid, lb.ipAddrID)
+		pa := &cloudstack.QueryAsyncJobResultParams{}
+		pa.SetJobid(jobid)
+		rawAsync, err := lb.client.GetAsyncJobResult(jobid, int64(time.Minute))
+		if err != nil {
+			return err
+		}
+		glog.V(4).Infof("Result: %s", string(rawAsync))
+		var asyncResult struct {
+			JobResult struct {
+				IPAddress struct {
+					IPAddress string `json:"ipaddress,omitempty"`
+				} `json:"ipaddress,omitempty"`
+			} `json:"jobresult,omitempty"`
+		}
+		err = json.Unmarshal(rawAsync, &asyncResult)
+		if err != nil {
+			return err
+		}
+		lb.ipAddr = asyncResult.JobResult.IPAddress.IPAddress
+	}
 	glog.V(4).Infof("Allocated IP %s for load balancer %s with name %v", lb.ipAddr, lb.ipAddrID, lb.name)
 	return nil
 }
