@@ -24,7 +24,6 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
@@ -32,14 +31,15 @@ import (
 type loadBalancer struct {
 	*CSCloud
 
-	name       string
-	algorithm  string
-	hostIDs    []string
-	ipAddr     string
-	ipAddrID   string
-	networkIDs []string
-	projectID  string
-	rules      map[string]*cloudstack.LoadBalancerRule
+	name        string
+	algorithm   string
+	hostIDs     []string
+	ipAddr      string
+	ipAddrID    string
+	networkIDs  []string
+	projectID   string
+	environment string
+	rules       map[string]*cloudstack.LoadBalancerRule
 }
 
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
@@ -190,11 +190,15 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 		return err
 	}
 
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
 	for _, lbRule := range lb.rules {
-		p := cs.client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lbRule.Id)
+		p := client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lbRule.Id)
 
 		// Retrieve all VMs currently associated to this load balancer rule.
-		l, err := cs.client.LoadBalancer.ListLoadBalancerRuleInstances(p)
+		l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(p)
 		if err != nil {
 			return fmt.Errorf("error retrieving associated instances: %v", err)
 		}
@@ -254,15 +258,25 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 
 // getLoadBalancer retrieves the IP address and ID and all the existing rules it can find.
 func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
-	projectID := cs.projectIDForObject(service.ObjectMeta)
+	projectID, ok := getLabelOrAnnotation(service.ObjectMeta, cs.projectIDLabel)
+	if !ok {
+		return nil, fmt.Errorf("unable to retrive projectID for service: %v", service)
+	}
+	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
 	lb := &loadBalancer{
-		CSCloud:   cs,
-		name:      cs.getLoadBalancerName(*service),
-		projectID: projectID,
-		rules:     make(map[string]*cloudstack.LoadBalancerRule),
+		CSCloud:     cs,
+		name:        cs.getLoadBalancerName(*service),
+		projectID:   projectID,
+		environment: environment,
+		rules:       make(map[string]*cloudstack.LoadBalancerRule),
 	}
 
-	p := cs.client.LoadBalancer.NewListLoadBalancerRulesParams()
+	client, err := lb.getClient()
+	if err != nil {
+		return nil, err
+	}
+
+	p := client.LoadBalancer.NewListLoadBalancerRulesParams()
 	p.SetKeyword(lb.name)
 	p.SetListall(true)
 
@@ -270,7 +284,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
 		p.SetProjectid(projectID)
 	}
 
-	l, err := cs.client.LoadBalancer.ListLoadBalancerRules(p)
+	l, err := client.LoadBalancer.ListLoadBalancerRules(p)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving load balancer rules: %v", err)
 	}
@@ -299,28 +313,36 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 	}
 	hostNames := map[string]bool{}
 	for _, node := range nodes {
-		if cs.nodeNameLabel != "" {
-			if name, ok := node.Labels[cs.nodeNameLabel]; ok {
-				hostNames[name] = true
-			}
-			if name, ok := node.Annotations[cs.nodeNameLabel]; ok {
-				hostNames[name] = true
-			}
+		if name, ok := getLabelOrAnnotation(node.ObjectMeta, cs.nodeNameLabel); ok {
+			hostNames[name] = true
 			continue
 		}
 		hostNames[node.Name] = true
 	}
 
-	p := cs.client.VirtualMachine.NewListVirtualMachinesParams()
-	p.SetListall(true)
+	environmentID, _ := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.environmentLabel)
 
-	projectID := cs.projectIDForObject(nodes[0].ObjectMeta)
+	projectID, ok := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.projectIDLabel)
+	if !ok {
+		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %v", nodes[0])
+	}
+
+	var client *cloudstack.CloudStackClient
+	if env, ok := cs.environments[environmentID]; ok {
+		client = env.client
+	}
+	if client == nil {
+		return nil, nil, "", fmt.Errorf("unable to retrieve cloudstack client for environment %q", environmentID)
+	}
+
+	p := client.VirtualMachine.NewListVirtualMachinesParams()
+	p.SetListall(true)
 
 	if projectID != "" {
 		p.SetProjectid(projectID)
 	}
 
-	l, err := cs.client.VirtualMachine.ListVirtualMachines(p)
+	l, err := client.VirtualMachine.ListVirtualMachines(p)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("error retrieving list of hosts: %v", err)
 	}
@@ -346,19 +368,6 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 	return hostIDs, networkIDs, projectID, nil
 }
 
-func (cs *CSCloud) projectIDForObject(obj metav1.ObjectMeta) string {
-	projectID := cs.projectID
-	if cs.projectIDLabel != "" {
-		if l, ok := obj.Labels[cs.projectIDLabel]; ok {
-			projectID = l
-		}
-		if l, ok := obj.Annotations[cs.projectIDLabel]; ok {
-			projectID = l
-		}
-	}
-	return projectID
-}
-
 func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Service) []*v1.Node {
 	if cs.serviceLabel == "" || cs.nodeLabel == "" {
 		return nodes
@@ -376,10 +385,15 @@ func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Servic
 }
 
 func (cs *CSCloud) getLoadBalancerName(service v1.Service) string {
-	if cs.lbDomain == "" {
+	environment, ok := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
+	if !ok {
 		return cloudprovider.GetLoadBalancerName(&service)
 	}
-	return fmt.Sprintf("%s.%s", service.Name, cs.lbDomain)
+	var lbDomain string
+	if env, ok := cs.environments[environment]; ok {
+		lbDomain = env.lbDomain
+	}
+	return fmt.Sprintf("%s.%s", service.Name, lbDomain)
 }
 
 // hasLoadBalancerIP returns true if we have a load balancer address and ID.
@@ -399,8 +413,11 @@ func (lb *loadBalancer) getLoadBalancerIP(loadBalancerIP string) error {
 // getPublicIPAddressID retrieves the ID of the given IP, and sets the address and it's ID.
 func (lb *loadBalancer) getPublicIPAddress(loadBalancerIP string) error {
 	glog.V(4).Infof("Retrieve load balancer IP details: %v", loadBalancerIP)
-
-	p := lb.client.Address.NewListPublicIpAddressesParams()
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	p := client.Address.NewListPublicIpAddressesParams()
 	p.SetIpaddress(loadBalancerIP)
 	p.SetListall(true)
 
@@ -408,7 +425,7 @@ func (lb *loadBalancer) getPublicIPAddress(loadBalancerIP string) error {
 		p.SetProjectid(lb.projectID)
 	}
 
-	l, err := lb.client.Address.ListPublicIpAddresses(p)
+	l, err := client.Address.ListPublicIpAddresses(p)
 	if err != nil {
 		return fmt.Errorf("error retrieving IP address: %v", err)
 	}
@@ -428,7 +445,11 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	glog.V(4).Infof("Allocate new IP for load balancer: %v", lb.name)
 	// If a network belongs to a VPC, the IP address needs to be associated with
 	// the VPC instead of with the network.
-	network, count, err := lb.client.Network.GetNetworkByID(lb.networkIDs[0], cloudstack.WithProject(lb.projectID))
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	network, count, err := client.Network.GetNetworkByID(lb.networkIDs[0], cloudstack.WithProject(lb.projectID))
 	if err != nil {
 		if count == 0 {
 			return fmt.Errorf("could not find network %v", lb.networkIDs[0])
@@ -445,8 +466,8 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	if lb.projectID != "" {
 		pc.SetParam("projectid", lb.projectID)
 	}
-	if lb.lbEnvironmentID != "" {
-		pc.SetParam("lbenvironmentid", lb.lbEnvironmentID)
+	if lb.getLBEnvironmentID() != "" {
+		pc.SetParam("lbenvironmentid", lb.getLBEnvironmentID())
 	}
 
 	var result map[string]string
@@ -454,7 +475,7 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	if associateCommand == "" {
 		associateCommand = "associateIpAddress"
 	}
-	err = lb.client.Custom.CustomRequest(associateCommand, pc, &result)
+	err = client.Custom.CustomRequest(associateCommand, pc, &result)
 	if err != nil {
 		return fmt.Errorf("error associate new IP address using endpoint %q: %v", associateCommand, err)
 	}
@@ -465,7 +486,7 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		glog.V(4).Infof("Querying async job %s for load balancer %s ", jobid, lb.ipAddrID)
 		pa := &cloudstack.QueryAsyncJobResultParams{}
 		pa.SetJobid(jobid)
-		rawAsync, err := lb.client.GetAsyncJobResult(jobid, int64(time.Minute))
+		rawAsync, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
 		if err != nil {
 			return err
 		}
@@ -488,7 +509,10 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 // releasePublicIPAddress releases an associated IP.
 func (lb *loadBalancer) releaseLoadBalancerIP() error {
 	glog.V(4).Infof("Release IP %s (%s) for load balancer: %v", lb.ipAddr, lb.ipAddrID, lb.name)
-
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
 	pc := &cloudstack.CustomServiceParams{}
 	pc.SetParam("id", lb.ipAddrID)
 	if lb.projectID != "" {
@@ -500,7 +524,7 @@ func (lb *loadBalancer) releaseLoadBalancerIP() error {
 		disassociateCommand = "disassociateIpAddress"
 	}
 	var data map[string]interface{}
-	err := lb.client.Custom.CustomRequest(disassociateCommand, pc, &data)
+	err = client.Custom.CustomRequest(disassociateCommand, pc, &data)
 	if err != nil {
 		return fmt.Errorf("error disassociate IP address using endpoint %q: %v", disassociateCommand, err)
 	}
@@ -531,17 +555,25 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, port v1.Service
 // updateLoadBalancerRule updates a load balancer rule.
 func (lb *loadBalancer) updateLoadBalancerRule(lbRuleName string) error {
 	lbRule := lb.rules[lbRuleName]
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
 
-	p := lb.client.LoadBalancer.NewUpdateLoadBalancerRuleParams(lbRule.Id)
+	p := client.LoadBalancer.NewUpdateLoadBalancerRuleParams(lbRule.Id)
 	p.SetAlgorithm(lb.algorithm)
 
-	_, err := lb.client.LoadBalancer.UpdateLoadBalancerRule(p)
+	_, err = client.LoadBalancer.UpdateLoadBalancerRule(p)
 	return err
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
 func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.ServicePort) (*cloudstack.LoadBalancerRule, error) {
-	p := lb.client.LoadBalancer.NewCreateLoadBalancerRuleParams(
+	client, err := lb.getClient()
+	if err != nil {
+		return nil, err
+	}
+	p := client.LoadBalancer.NewCreateLoadBalancerRuleParams(
 		lb.algorithm,
 		lbRuleName,
 		int(port.NodePort),
@@ -564,7 +596,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 	p.SetOpenfirewall(false)
 
 	// Create a new load balancer rule.
-	r, err := lb.client.LoadBalancer.CreateLoadBalancerRule(p)
+	r, err := client.LoadBalancer.CreateLoadBalancerRule(p)
 	if err != nil {
 		return nil, fmt.Errorf("error creating load balancer rule %v: %v", lbRuleName, err)
 	}
@@ -586,9 +618,13 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 
 // deleteLoadBalancerRule deletes a load balancer rule.
 func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRule) error {
-	p := lb.client.LoadBalancer.NewDeleteLoadBalancerRuleParams(lbRule.Id)
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	p := client.LoadBalancer.NewDeleteLoadBalancerRuleParams(lbRule.Id)
 
-	if _, err := lb.client.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
+	if _, err := client.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error deleting load balancer rule %v: %v", lbRule.Name, err)
 	}
 
@@ -600,10 +636,14 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRu
 
 // assignHostsToRule assigns hosts to a load balancer rule.
 func (lb *loadBalancer) assignHostsToRule(lbRule *cloudstack.LoadBalancerRule, hostIDs []string) error {
-	p := lb.client.LoadBalancer.NewAssignToLoadBalancerRuleParams(lbRule.Id)
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	p := client.LoadBalancer.NewAssignToLoadBalancerRuleParams(lbRule.Id)
 	p.SetVirtualmachineids(hostIDs)
 
-	if _, err := lb.client.LoadBalancer.AssignToLoadBalancerRule(p); err != nil {
+	if _, err := client.LoadBalancer.AssignToLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error assigning hosts to load balancer rule %v: %v", lbRule.Name, err)
 	}
 
@@ -621,7 +661,11 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 	}
 	p.SetParam("id", lbRule.Id)
 	p.SetParam("networkids", networkIDs)
-	if err := lb.client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, nil); err != nil {
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, nil); err != nil {
 		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Id, lb.customAssignNetworksCommand, err)
 	}
 	return nil
@@ -629,10 +673,14 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 
 // removeHostsFromRule removes hosts from a load balancer rule.
 func (lb *loadBalancer) removeHostsFromRule(lbRule *cloudstack.LoadBalancerRule, hostIDs []string) error {
-	p := lb.client.LoadBalancer.NewRemoveFromLoadBalancerRuleParams(lbRule.Id)
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	p := client.LoadBalancer.NewRemoveFromLoadBalancerRuleParams(lbRule.Id)
 	p.SetVirtualmachineids(hostIDs)
 
-	if _, err := lb.client.LoadBalancer.RemoveFromLoadBalancerRule(p); err != nil {
+	if _, err := client.LoadBalancer.RemoveFromLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error removing hosts from load balancer rule %v: %v", lbRule.Name, err)
 	}
 
@@ -649,6 +697,18 @@ func (lb *loadBalancer) setAlgorithm(service *v1.Service) error {
 		return fmt.Errorf("unsupported load balancer affinity: %v", service.Spec.SessionAffinity)
 	}
 	return nil
+}
+
+func (lb *loadBalancer) getClient() (*cloudstack.CloudStackClient, error) {
+	client := lb.CSCloud.environments[lb.environment].client
+	if client == nil {
+		return nil, fmt.Errorf("unable to retrive cloudstack client for lb: %v", lb)
+	}
+	return client, nil
+}
+
+func (lb *loadBalancer) getLBEnvironmentID() string {
+	return lb.CSCloud.environments[lb.environment].lbEnvironmentID
 }
 
 // symmetricDifference returns the symmetric difference between the old (existing) and new (wanted) host ID's.

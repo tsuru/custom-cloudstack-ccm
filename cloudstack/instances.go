@@ -29,8 +29,9 @@ import (
 )
 
 type node struct {
-	projectID string
-	name      string
+	projectID   string
+	name        string
+	environment string
 }
 
 // NodeAddresses returns the addresses of the specified instance.
@@ -60,7 +61,11 @@ func (cs *CSCloud) NodeAddressesByProviderID(providerID string) ([]v1.NodeAddres
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
 	}
-	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByID(
+	client, err := cs.clientForNode(node)
+	if err != nil {
+		return nil, err
+	}
+	instance, count, err := client.VirtualMachine.GetVirtualMachineByID(
 		providerID,
 		cloudstack.WithProject(node.projectID),
 	)
@@ -144,7 +149,11 @@ func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
 	}
-	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByID(
+	client, err := cs.clientForNode(node)
+	if err != nil {
+		return "", err
+	}
+	instance, count, err := client.VirtualMachine.GetVirtualMachineByID(
 		providerID,
 		cloudstack.WithProject(node.projectID),
 	)
@@ -180,7 +189,11 @@ func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
 	}
-	_, count, err := cs.client.VirtualMachine.GetVirtualMachineByID(
+	client, err := cs.clientForNode(node)
+	if err != nil {
+		return false, err
+	}
+	_, count, err := client.VirtualMachine.GetVirtualMachineByID(
 		providerID,
 		cloudstack.WithProject(node.projectID),
 	)
@@ -195,7 +208,11 @@ func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
 }
 
 func (cs *CSCloud) getInstanceForNode(n *node) (*cloudstack.VirtualMachine, error) {
-	instance, count, err := cs.client.VirtualMachine.GetVirtualMachineByName(
+	client, err := cs.clientForNode(n)
+	if err != nil {
+		return nil, err
+	}
+	instance, count, err := client.VirtualMachine.GetVirtualMachineByName(
 		n.name,
 		cloudstack.WithProject(n.projectID),
 	)
@@ -245,17 +262,37 @@ func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
 
 func (cs *CSCloud) newNode(kubeNode metav1.ObjectMeta) (*node, error) {
 	name := kubeNode.Name
-	if cs.nodeNameLabel != "" {
-		if n, ok := kubeNode.Labels[cs.nodeNameLabel]; ok {
-			name = n
-		}
-		if n, ok := kubeNode.Annotations[cs.nodeNameLabel]; ok {
-			name = n
-		}
+	if n, ok := getLabelOrAnnotation(kubeNode, cs.nodeNameLabel); ok {
+		name = n
+	}
+	environment, _ := getLabelOrAnnotation(kubeNode, cs.environmentLabel)
+	projectID, ok := getLabelOrAnnotation(kubeNode, cs.projectIDLabel)
+	if !ok {
+		return nil, fmt.Errorf("failed to retrive projectID from node %q", name)
 	}
 	n := &node{
-		projectID: cs.projectIDForObject(kubeNode),
-		name:      name,
+		projectID:   projectID,
+		environment: environment,
+		name:        name,
 	}
 	return n, nil
+}
+
+func (cs *CSCloud) clientForNode(n *node) (*cloudstack.CloudStackClient, error) {
+	client := cs.environments[n.environment].client
+	if client == nil {
+		return nil, fmt.Errorf("unable to retrieve client for node %v", n)
+	}
+	return cs.environments[n.environment].client, nil
+}
+
+func getLabelOrAnnotation(obj metav1.ObjectMeta, name string) (string, bool) {
+	if name == "" {
+		return "", false
+	}
+	if n, ok := obj.Labels[name]; ok {
+		return n, true
+	}
+	n, ok := obj.Annotations[name]
+	return n, ok
 }
