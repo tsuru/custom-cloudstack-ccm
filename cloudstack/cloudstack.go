@@ -17,10 +17,10 @@ limitations under the License.
 package cloudstack
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	"gopkg.in/gcfg.v1"
@@ -35,19 +35,20 @@ const ProviderName = "custom-cloudstack"
 // CSConfig wraps the config for the CloudStack cloud provider.
 type CSConfig struct {
 	Global struct {
-		APIURL             string `gcfg:"api-url"`
-		APIKey             string `gcfg:"api-key"`
-		SecretKey          string `gcfg:"secret-key"`
-		SSLNoVerify        bool   `gcfg:"ssl-no-verify"`
-		ProjectID          string `gcfg:"project-id"`
-		Zone               string `gcfg:"zone"`
 		ServiceFilterLabel string `gcfg:"service-label"`
 		NodeFilterLabel    string `gcfg:"node-label"`
 		NodeNameLabel      string `gcfg:"node-name-label"`
 		ProjectIDLabel     string `gcfg:"project-id-label"`
-		LBEnvironmentID    string `gcfg:"lb-environment-id"`
-		LBDomain           string `gcfg:"lb-domain"`
-	}
+		EnvironmentLabel   string `gcfg:"environment-label"`
+	} `gcfg:"global"`
+	Environment map[string]*struct {
+		APIURL          string `gcfg:"api-url"`
+		APIKey          string `gcfg:"api-key"`
+		SecretKey       string `gcfg:"secret-key"`
+		SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
+		LBEnvironmentID string `gcfg:"lb-environment-id"`
+		LBDomain        string `gcfg:"lb-domain"`
+	} `gcfg:"environment"`
 	Command struct {
 		AssociateIP    string `gcfg:"associate-ip"`
 		DisassociateIP string `gcfg:"disassociate-ip"`
@@ -55,11 +56,18 @@ type CSConfig struct {
 	} `gcfg:"custom-command"`
 }
 
+type CSEnvironment struct {
+	client          *cloudstack.CloudStackClient
+	lbEnvironmentID string
+	lbDomain        string
+}
+
 // CSCloud is an implementation of Interface for CloudStack.
 type CSCloud struct {
-	client    *cloudstack.CloudStackClient
-	projectID string // If non-"" and projectIDLabel is not set, all resources will be created within this project
-	zone      string
+	environments map[string]CSEnvironment
+
+	// environmentLabel used to figure out the resource CS environment
+	environmentLabel string
 
 	kubeClient kubernetes.Interface
 
@@ -75,8 +83,6 @@ type CSCloud struct {
 
 	// Custom command to be used to associate an IP to a LB
 	customAssociateIPCommand string
-	lbEnvironmentID          string
-	lbDomain                 string
 
 	// Custom command to be used to disassociate an IP from a LB
 	customDisassociateIPCommand string
@@ -107,14 +113,16 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 		return nil, fmt.Errorf("could not parse cloud provider config: %v", err)
 	}
 
-	if cfg.Global.APIURL == "" {
-		cfg.Global.APIURL = os.Getenv("CLOUDSTACK_API_URL")
-	}
-	if cfg.Global.APIKey == "" {
-		cfg.Global.APIKey = os.Getenv("CLOUDSTACK_API_KEY")
-	}
-	if cfg.Global.SecretKey == "" {
-		cfg.Global.SecretKey = os.Getenv("CLOUDSTACK_SECRET_KEY")
+	for k, v := range cfg.Environment {
+		if v.APIURL == "" {
+			v.APIURL = os.Getenv("CLOUDSTACK_" + strings.ToUpper(k) + "_API_URL")
+		}
+		if v.APIKey == "" {
+			v.APIKey = os.Getenv("CLOUDSTACK_" + strings.ToUpper(k) + "_API_KEY")
+		}
+		if v.SecretKey == "" {
+			v.SecretKey = os.Getenv("CLOUDSTACK_" + strings.ToUpper(k) + "_SECRET_KEY")
+		}
 	}
 
 	return cfg, nil
@@ -123,23 +131,25 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 // newCSCloud creates a new instance of CSCloud.
 func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 	cs := &CSCloud{
-		projectID:                cfg.Global.ProjectID,
-		lbEnvironmentID:          cfg.Global.LBEnvironmentID,
-		lbDomain:                 cfg.Global.LBDomain,
-		zone:                     cfg.Global.Zone,
-		serviceLabel:             cfg.Global.ServiceFilterLabel,
-		nodeLabel:                cfg.Global.NodeFilterLabel,
-		nodeNameLabel:            cfg.Global.NodeNameLabel,
-		projectIDLabel:           cfg.Global.ProjectIDLabel,
-		customAssociateIPCommand: cfg.Command.AssociateIP,
+		serviceLabel:                cfg.Global.ServiceFilterLabel,
+		nodeLabel:                   cfg.Global.NodeFilterLabel,
+		nodeNameLabel:               cfg.Global.NodeNameLabel,
+		projectIDLabel:              cfg.Global.ProjectIDLabel,
+		environmentLabel:            cfg.Global.EnvironmentLabel,
+		customAssociateIPCommand:    cfg.Command.AssociateIP,
+		customAssignNetworksCommand: cfg.Command.AssignNetworks,
+		customDisassociateIPCommand: cfg.Command.DisassociateIP,
 	}
 
-	if cfg.Global.APIURL != "" && cfg.Global.APIKey != "" && cfg.Global.SecretKey != "" {
-		cs.client = cloudstack.NewAsyncClient(cfg.Global.APIURL, cfg.Global.APIKey, cfg.Global.SecretKey, !cfg.Global.SSLNoVerify)
-	}
-
-	if cs.client == nil {
-		return nil, errors.New("no cloud provider config given")
+	for k, v := range cfg.Environment {
+		if v.APIURL == "" || v.APIKey == "" || v.SecretKey == "" {
+			return nil, fmt.Errorf("missing credentials for environment %q", k)
+		}
+		cs.environments[k] = CSEnvironment{
+			lbEnvironmentID: v.LBEnvironmentID,
+			lbDomain:        v.LBDomain,
+			client:          cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify),
+		}
 	}
 
 	return cs, nil
@@ -152,19 +162,17 @@ func (cs *CSCloud) Initialize(clientBuilder controller.ControllerClientBuilder) 
 
 // LoadBalancer returns an implementation of LoadBalancer for CloudStack.
 func (cs *CSCloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
-	if cs.client == nil {
+	if len(cs.environments) == 0 {
 		return nil, false
 	}
-
 	return cs, true
 }
 
 // Instances returns an implementation of Instances for CloudStack.
 func (cs *CSCloud) Instances() (cloudprovider.Instances, bool) {
-	if cs.client == nil {
+	if len(cs.environments) == 0 {
 		return nil, false
 	}
-
 	return cs, true
 }
 
