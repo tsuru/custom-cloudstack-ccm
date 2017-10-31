@@ -139,6 +139,7 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		customAssociateIPCommand:    cfg.Command.AssociateIP,
 		customAssignNetworksCommand: cfg.Command.AssignNetworks,
 		customDisassociateIPCommand: cfg.Command.DisassociateIP,
+		environments:                make(map[string]CSEnvironment),
 	}
 
 	for k, v := range cfg.Environment {
