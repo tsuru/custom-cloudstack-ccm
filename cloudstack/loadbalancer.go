@@ -47,7 +47,7 @@ func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1
 	glog.V(4).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
 
 	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(service)
+	lb, err := cs.getLoadBalancer(service, "")
 	if err != nil {
 		return nil, false, err
 	}
@@ -73,24 +73,26 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		return nil, fmt.Errorf("requested load balancer with no ports")
 	}
 
-	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(service)
-	if err != nil {
-		return nil, err
-	}
-
-	lb.setAlgorithm(service)
-
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("no nodes available to add to load balancer")
 	}
 
-	lb.hostIDs, lb.networkIDs, lb.projectID, err = cs.extractIDs(nodes)
+	hostIDs, networkIDs, projectID, err := cs.extractIDs(nodes)
 	if err != nil {
 		return nil, err
 	}
+
+	// Get the load balancer details and existing rules.
+	lb, err := cs.getLoadBalancer(service, projectID)
+	if err != nil {
+		return nil, err
+	}
+	lb.hostIDs = hostIDs
+	lb.networkIDs = networkIDs
+
+	lb.setAlgorithm(service)
 
 	glog.V(4).Infof("Ensuring Load Balancer: %+v", lb)
 
@@ -178,7 +180,7 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 	glog.V(4).Infof("UpdateLoadBalancer(%v, %v, %v, %v)", clusterName, service.Namespace, service.Name, nodes)
 
 	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(service)
+	lb, err := cs.getLoadBalancer(service, "")
 	if err != nil {
 		return err
 	}
@@ -234,7 +236,7 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 	glog.V(4).Infof("EnsureLoadBalancerDeleted(%v, %v, %v)", clusterName, service.Namespace, service.Name)
 
 	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(service)
+	lb, err := cs.getLoadBalancer(service, "")
 	if err != nil {
 		return err
 	}
@@ -257,10 +259,13 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 }
 
 // getLoadBalancer retrieves the IP address and ID and all the existing rules it can find.
-func (cs *CSCloud) getLoadBalancer(service *v1.Service) (*loadBalancer, error) {
-	projectID, ok := getLabelOrAnnotation(service.ObjectMeta, cs.projectIDLabel)
-	if !ok {
-		return nil, fmt.Errorf("unable to retrive projectID for service: %v", service)
+func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*loadBalancer, error) {
+	if projectID == "" {
+		var ok bool
+		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.projectIDLabel)
+		if !ok {
+			return nil, fmt.Errorf("unable to retrive projectID for service: %v", service)
+		}
 	}
 	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
 	lb := &loadBalancer{
