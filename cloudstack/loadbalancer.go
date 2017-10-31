@@ -179,18 +179,20 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, nodes []*v1.Node) error {
 	glog.V(4).Infof("UpdateLoadBalancer(%v, %v, %v, %v)", clusterName, service.Namespace, service.Name, nodes)
 
-	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(service, "")
-	if err != nil {
-		return err
-	}
-
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
-	lb.hostIDs, lb.networkIDs, lb.projectID, err = cs.extractIDs(nodes)
+	hostIDs, networkIDs, projectID, err := cs.extractIDs(nodes)
 	if err != nil {
 		return err
 	}
+
+	// Get the load balancer details and existing rules.
+	lb, err := cs.getLoadBalancer(service, projectID)
+	if err != nil {
+		return err
+	}
+	lb.hostIDs = hostIDs
+	lb.networkIDs = networkIDs
 
 	client, err := lb.getClient()
 	if err != nil {
