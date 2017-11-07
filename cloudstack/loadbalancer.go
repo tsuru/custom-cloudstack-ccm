@@ -171,7 +171,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	}
 
 	status = &v1.LoadBalancerStatus{}
-	status.Ingress = []v1.LoadBalancerIngress{{IP: lb.ipAddr}}
+	status.Ingress = []v1.LoadBalancerIngress{{IP: lb.ipAddr, Hostname: lb.name}}
 
 	if lb.projectID != "" && service.Labels[cs.projectIDLabel] == "" {
 		service.Labels[cs.projectIDLabel] = lb.projectID
