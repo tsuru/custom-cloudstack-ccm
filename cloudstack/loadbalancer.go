@@ -28,6 +28,10 @@ import (
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
 
+const (
+	lbNameLabel = "csccm.cloudprovider.io/loadbalancer-name"
+)
+
 type loadBalancer struct {
 	*CSCloud
 
@@ -391,7 +395,14 @@ func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Servic
 	return filteredNodes
 }
 
+// getLoadBalancerName returns the name of the load balancer responsible for the service
+// by looking at the service label. If not set, it fallsback to the
+// concatanation of the service name and the environment load balancer domain for the environent
 func (cs *CSCloud) getLoadBalancerName(service v1.Service) string {
+	name, ok := getLabelOrAnnotation(service.ObjectMeta, lbNameLabel)
+	if ok {
+		return name
+	}
 	environment, ok := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
 	if !ok {
 		return cloudprovider.GetLoadBalancerName(&service)
