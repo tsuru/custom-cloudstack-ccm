@@ -99,8 +99,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	lb.setAlgorithm(service)
 
 	glog.V(4).Infof("Ensuring Load Balancer: %+v", lb)
-
-	if !lb.hasLoadBalancerIP() {
+	alreadyHadIP := lb.hasLoadBalancerIP()
+	if !alreadyHadIP {
 		// Create or retrieve the load balancer IP.
 		if errLB := lb.getLoadBalancerIP(service.Spec.LoadBalancerIP); errLB != nil {
 			return nil, errLB
@@ -148,6 +148,13 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		lbRule, err := lb.createLoadBalancerRule(lbRuleName, port)
 		if err != nil {
 			return nil, err
+		}
+
+		if !alreadyHadIP {
+			glog.V(4).Infof("Assigning tag to created load balancer rule: %v", lbRuleName)
+			if err := lb.assignTagToRule(lbRule); err != nil {
+				return nil, err
+			}
 		}
 
 		glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
@@ -642,12 +649,6 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 		Publicipid:  r.Publicipid,
 	}
 
-	tp := client.Resourcetags.NewCreateTagsParams([]string{r.Id}, "LoadBalancer", map[string]string{"cloudprovider": ProviderName})
-	_, err = client.Resourcetags.CreateTags(tp)
-	if err != nil {
-		return nil, fmt.Errorf("error adding tags to load balancer %s: %v", r.Id, err)
-	}
-
 	return lbRule, nil
 }
 
@@ -695,6 +696,19 @@ func (lb *loadBalancer) hasProviderTags() (bool, error) {
 		return false, err
 	}
 	return res.Count != 0, nil
+}
+
+func (lb *loadBalancer) assignTagToRule(lbRule *cloudstack.LoadBalancerRule) error {
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	tp := client.Resourcetags.NewCreateTagsParams([]string{lbRule.Id}, "LoadBalancer", map[string]string{"cloudprovider": ProviderName})
+	_, err = client.Resourcetags.CreateTags(tp)
+	if err != nil {
+		return fmt.Errorf("error adding tags to load balancer %s: %v", lbRule.Id, err)
+	}
+	return nil
 }
 
 // assignHostsToRule assigns hosts to a load balancer rule.
