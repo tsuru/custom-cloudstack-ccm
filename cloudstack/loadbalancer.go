@@ -247,6 +247,16 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 		return err
 	}
 
+	hasTags, err := lb.hasProviderTags()
+	if err != nil {
+		return fmt.Errorf("failed to check load balancer tags: %v", err)
+	}
+
+	if !hasTags {
+		glog.V(3).Infof("skipping deletion of load balancer %s. Rules missing cloudprovider tag.", lb.ipAddrID)
+		return nil
+	}
+
 	for _, lbRule := range lb.rules {
 		glog.V(4).Infof("Deleting load balancer rule: %v", lbRule.Name)
 		if err := lb.deleteLoadBalancerRule(lbRule); err != nil {
@@ -521,6 +531,13 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		lb.ipAddr = asyncResult.IPAddress.IPAddress
 	}
 	glog.V(4).Infof("Allocated IP %s for load balancer %s with name %v", lb.ipAddr, lb.ipAddrID, lb.name)
+
+	tp := client.Resourcetags.NewCreateTagsParams([]string{lb.ipAddrID}, "LoadBalancer", map[string]string{"cloudprovider": ProviderName})
+	_, err = client.Resourcetags.CreateTags(tp)
+	if err != nil {
+		return fmt.Errorf("error adding tags to load balancer %s: %v", lb.ipAddrID, err)
+	}
+
 	return nil
 }
 
@@ -650,6 +667,26 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRu
 	delete(lb.rules, lbRule.Name)
 
 	return nil
+}
+
+func (lb *loadBalancer) hasProviderTags() (bool, error) {
+	client, err := lb.getClient()
+	if err != nil {
+		return false, err
+	}
+	p := client.Resourcetags.NewListTagsParams()
+	if lb.projectID != "" {
+		p.SetProjectid(lb.projectID)
+	}
+	p.SetResourceid(lb.ipAddrID)
+	p.SetResourcetype("LoadBalancer")
+	p.SetKey("cloudprovider")
+	p.SetValue(ProviderName)
+	res, err := client.Resourcetags.ListTags(p)
+	if err != nil {
+		return false, err
+	}
+	return res.Count != 0, nil
 }
 
 // assignHostsToRule assigns hosts to a load balancer rule.
