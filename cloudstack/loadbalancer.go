@@ -99,8 +99,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	lb.setAlgorithm(service)
 
 	glog.V(4).Infof("Ensuring Load Balancer: %+v", lb)
-	alreadyHadIP := lb.hasLoadBalancerIP()
-	if !alreadyHadIP {
+
+	if !lb.hasLoadBalancerIP() {
 		// Create or retrieve the load balancer IP.
 		if errLB := lb.getLoadBalancerIP(service.Spec.LoadBalancerIP); errLB != nil {
 			return nil, errLB
@@ -114,6 +114,14 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 					}
 				}
 			}(lb)
+		}
+	} else {
+		hasTags, err := lb.hasProviderTags()
+		if err != nil {
+			return nil, fmt.Errorf("failed to check load balancer tags: %v", err)
+		}
+		if !hasTags {
+			return nil, fmt.Errorf("load balancer %v already exists but is missing cloudprovider tag. skipping", lb)
 		}
 	}
 
@@ -150,11 +158,9 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 			return nil, err
 		}
 
-		if !alreadyHadIP {
-			glog.V(4).Infof("Assigning tag to created load balancer rule: %v", lbRuleName)
-			if err := lb.assignTagToRule(lbRule); err != nil {
-				return nil, err
-			}
+		glog.V(4).Infof("Assigning tag to load balancer rule: %v", lbRuleName)
+		if err := lb.assignTagToRule(lbRule); err != nil {
+			return nil, err
 		}
 
 		glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
@@ -204,6 +210,14 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 	}
 	lb.hostIDs = hostIDs
 	lb.networkIDs = networkIDs
+
+	hasTags, err := lb.hasProviderTags()
+	if err != nil {
+		return fmt.Errorf("failed to check load balancer tags: %v", err)
+	}
+	if !hasTags {
+		return fmt.Errorf("load balancer %v is missing cloudprovider tag. skipping", lb)
+	}
 
 	client, err := lb.getClient()
 	if err != nil {
