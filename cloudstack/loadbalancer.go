@@ -670,6 +670,14 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRu
 }
 
 func (lb *loadBalancer) hasProviderTags() (bool, error) {
+	if len(lb.rules) == 0 {
+		return false, nil
+	}
+	var id string
+	for _, r := range lb.rules {
+		id = r.Id
+		break
+	}
 	client, err := lb.getClient()
 	if err != nil {
 		return false, err
@@ -678,7 +686,7 @@ func (lb *loadBalancer) hasProviderTags() (bool, error) {
 	if lb.projectID != "" {
 		p.SetProjectid(lb.projectID)
 	}
-	p.SetResourceid(lb.ipAddrID)
+	p.SetResourceid(id)
 	p.SetResourcetype("LoadBalancer")
 	p.SetKey("cloudprovider")
 	p.SetValue(ProviderName)
