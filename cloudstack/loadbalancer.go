@@ -532,12 +532,6 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	}
 	glog.V(4).Infof("Allocated IP %s for load balancer %s with name %v", lb.ipAddr, lb.ipAddrID, lb.name)
 
-	tp := client.Resourcetags.NewCreateTagsParams([]string{lb.ipAddrID}, "LoadBalancer", map[string]string{"cloudprovider": ProviderName})
-	_, err = client.Resourcetags.CreateTags(tp)
-	if err != nil {
-		return fmt.Errorf("error adding tags to load balancer %s: %v", lb.ipAddrID, err)
-	}
-
 	return nil
 }
 
@@ -646,6 +640,12 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.Servic
 		Publicport:  r.Publicport,
 		Publicip:    r.Publicip,
 		Publicipid:  r.Publicipid,
+	}
+
+	tp := client.Resourcetags.NewCreateTagsParams([]string{r.Id}, "LoadBalancer", map[string]string{"cloudprovider": ProviderName})
+	_, err = client.Resourcetags.CreateTags(tp)
+	if err != nil {
+		return nil, fmt.Errorf("error adding tags to load balancer %s: %v", r.Id, err)
 	}
 
 	return lbRule, nil
