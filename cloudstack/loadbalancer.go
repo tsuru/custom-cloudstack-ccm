@@ -278,6 +278,11 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 		return nil
 	}
 
+	glog.V(4).Infof("Deleting load balancer provider tag: %v", lb.ipAddrID)
+	if err := lb.deleteProviderTag(); err != nil {
+		return err
+	}
+
 	for _, lbRule := range lb.rules {
 		glog.V(4).Infof("Deleting load balancer rule: %v", lbRule.Name)
 		if err := lb.deleteLoadBalancerRule(lbRule); err != nil {
@@ -710,6 +715,25 @@ func (lb *loadBalancer) hasProviderTags() (bool, error) {
 		return false, err
 	}
 	return res.Count != 0, nil
+}
+
+func (lb *loadBalancer) deleteProviderTag() error {
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+	if len(lb.rules) == 0 {
+		return nil
+	}
+	var id string
+	for _, r := range lb.rules {
+		id = r.Id
+		break
+	}
+	p := client.Resourcetags.NewDeleteTagsParams([]string{id}, "LoadBalancer")
+	p.SetTags(map[string]string{"cloudprovider": ProviderName})
+	_, err = client.Resourcetags.DeleteTags(p)
+	return err
 }
 
 func (lb *loadBalancer) assignTagToRule(lbRule *cloudstack.LoadBalancerRule) error {
