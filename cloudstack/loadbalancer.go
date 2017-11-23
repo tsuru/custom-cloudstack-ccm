@@ -125,7 +125,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		}
 		if !manage {
 			glog.V(3).Infof("Skipping EnsureLoadBalancer for service %s and LB %s", service.Name, lb.ipAddrID)
-			return nil, nil
+			return nil, fmt.Errorf("LB %s not managed by cloudprovider", lb.ipAddrID)
 		}
 	}
 
