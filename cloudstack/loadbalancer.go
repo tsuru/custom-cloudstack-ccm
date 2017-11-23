@@ -30,6 +30,9 @@ import (
 
 const (
 	lbNameLabel = "csccm.cloudprovider.io/loadbalancer-name"
+
+	cloudProviderTag = "cloudprovider"
+	serviceTag       = "kubernetes_service"
 )
 
 type loadBalancer struct {
@@ -116,12 +119,13 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 			}(lb)
 		}
 	} else {
-		hasTags, err := lb.hasProviderTags()
+		manage, err := shouldManageLB(lb, service)
 		if err != nil {
-			return nil, fmt.Errorf("failed to check load balancer tags: %v", err)
+			return nil, fmt.Errorf("failed to check if LB should be managed: %v", err)
 		}
-		if !hasTags {
-			return nil, fmt.Errorf("load balancer %v already exists but is missing cloudprovider tag. skipping", lb)
+		if !manage {
+			glog.V(3).Infof("Skipping EnsureLoadBalancer for service %s and LB %s", service.Name, lb.ipAddrID)
+			return nil, nil
 		}
 	}
 
@@ -159,7 +163,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		}
 
 		glog.V(4).Infof("Assigning tag to load balancer rule: %v", lbRuleName)
-		if err := lb.assignTagToRule(lbRule); err != nil {
+		if err := lb.assignTagsToRule(lbRule, service); err != nil {
 			return nil, err
 		}
 
@@ -211,12 +215,13 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 	lb.hostIDs = hostIDs
 	lb.networkIDs = networkIDs
 
-	hasTags, err := lb.hasProviderTags()
+	manage, err := shouldManageLB(lb, service)
 	if err != nil {
-		return fmt.Errorf("failed to check load balancer tags: %v", err)
+		return fmt.Errorf("failed to check if LB should be managed: %v", err)
 	}
-	if !hasTags {
-		return fmt.Errorf("load balancer %v is missing cloudprovider tag. skipping", lb)
+	if !manage {
+		glog.V(3).Infof("Skipping UpdateLoadBalancer for service %s and LB %s", service.Name, lb.ipAddrID)
+		return nil
 	}
 
 	client, err := lb.getClient()
@@ -273,18 +278,17 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 		return nil
 	}
 
-	hasTags, err := lb.hasProviderTags()
+	manage, err := shouldManageLB(lb, service)
 	if err != nil {
-		return fmt.Errorf("failed to check load balancer tags: %v", err)
+		return fmt.Errorf("failed to check if LB should be managed: %v", err)
 	}
-
-	if !hasTags {
-		glog.V(3).Infof("skipping deletion of load balancer %s. Rules missing cloudprovider tag.", lb.ipAddrID)
+	if !manage {
+		glog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s and LB %s", service.Name, lb.ipAddrID)
 		return nil
 	}
 
 	glog.V(4).Infof("Deleting load balancer provider tag: %v", lb.ipAddrID)
-	if err := lb.deleteProviderTag(); err != nil {
+	if err := lb.deleteTags(service); err != nil {
 		return err
 	}
 
@@ -694,7 +698,32 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRu
 	return nil
 }
 
-func (lb *loadBalancer) hasProviderTags() (bool, error) {
+// shouldManageLB checks if LB has the provider tag and the corresponding service tag
+func shouldManageLB(lb *loadBalancer, service *v1.Service) (bool, error) {
+	hasTags, err := lb.hasTag(cloudProviderTag, ProviderName)
+	if err != nil {
+		return false, fmt.Errorf("failed to check load balancer provider tag: %v", err)
+	}
+
+	if !hasTags {
+		glog.V(3).Infof("should NOT manage LB %s. Rules missing cloudprovider tag %q.", lb.ipAddrID, ProviderName)
+		return false, nil
+	}
+
+	hasTags, err = lb.hasTag(serviceTag, service.Name)
+	if err != nil {
+		return false, fmt.Errorf("failed to check load balancer service tag: %v", err)
+	}
+
+	if !hasTags {
+		glog.V(3).Infof("should NOT manage LB %s. Rules missing service tag %q.", lb.ipAddrID, service.Name)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (lb *loadBalancer) hasTag(k, v string) (bool, error) {
 	if len(lb.rules) == 0 {
 		return false, nil
 	}
@@ -713,8 +742,8 @@ func (lb *loadBalancer) hasProviderTags() (bool, error) {
 	}
 	p.SetResourceid(id)
 	p.SetResourcetype("LoadBalancer")
-	p.SetKey("cloudprovider")
-	p.SetValue(ProviderName)
+	p.SetKey(k)
+	p.SetValue(v)
 	res, err := client.Resourcetags.ListTags(p)
 	if err != nil {
 		return false, err
@@ -722,7 +751,7 @@ func (lb *loadBalancer) hasProviderTags() (bool, error) {
 	return res.Count != 0, nil
 }
 
-func (lb *loadBalancer) deleteProviderTag() error {
+func (lb *loadBalancer) deleteTags(service *v1.Service) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -736,17 +765,18 @@ func (lb *loadBalancer) deleteProviderTag() error {
 		break
 	}
 	p := client.Resourcetags.NewDeleteTagsParams([]string{id}, "LoadBalancer")
-	p.SetTags(map[string]string{"cloudprovider": ProviderName})
+	p.SetTags(map[string]string{cloudProviderTag: ProviderName, serviceTag: service.Name})
 	_, err = client.Resourcetags.DeleteTags(p)
 	return err
 }
 
-func (lb *loadBalancer) assignTagToRule(lbRule *cloudstack.LoadBalancerRule) error {
+func (lb *loadBalancer) assignTagsToRule(lbRule *cloudstack.LoadBalancerRule, service *v1.Service) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
 	}
-	tp := client.Resourcetags.NewCreateTagsParams([]string{lbRule.Id}, "LoadBalancer", map[string]string{"cloudprovider": ProviderName})
+	tags := map[string]string{cloudProviderTag: ProviderName, serviceTag: service.Name}
+	tp := client.Resourcetags.NewCreateTagsParams([]string{lbRule.Id}, "LoadBalancer", tags)
 	_, err = client.Resourcetags.CreateTags(tp)
 	if err != nil {
 		return fmt.Errorf("error adding tags to load balancer %s: %v", lbRule.Id, err)
