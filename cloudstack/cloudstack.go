@@ -48,6 +48,7 @@ type CSConfig struct {
 		SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
 		LBEnvironmentID string `gcfg:"lb-environment-id"`
 		LBDomain        string `gcfg:"lb-domain"`
+		RemoveLBs       bool   `gcfg:"remove-lbs-on-delete"`
 	} `gcfg:"environment"`
 	Command struct {
 		AssociateIP    string `gcfg:"associate-ip"`
@@ -60,6 +61,8 @@ type CSEnvironment struct {
 	client          *cloudstack.CloudStackClient
 	lbEnvironmentID string
 	lbDomain        string
+	// Indicates if LBs should be deleted upon service removal
+	removeLBs bool
 }
 
 // CSCloud is an implementation of Interface for CloudStack.
@@ -150,6 +153,7 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 			lbEnvironmentID: v.LBEnvironmentID,
 			lbDomain:        v.LBDomain,
 			client:          cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify),
+			removeLBs:       v.RemoveLBs,
 		}
 	}
 

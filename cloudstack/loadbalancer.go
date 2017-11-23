@@ -268,6 +268,11 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 		return err
 	}
 
+	if !lb.environments[lb.environment].removeLBs {
+		glog.V(3).Infof("skipping deletion of load balancer %s: environment has removals disabled.", lb.ipAddrID)
+		return nil
+	}
+
 	hasTags, err := lb.hasProviderTags()
 	if err != nil {
 		return fmt.Errorf("failed to check load balancer tags: %v", err)
