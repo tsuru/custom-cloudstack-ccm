@@ -815,12 +815,22 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 	if lb.customAssignNetworksCommand == "" {
 		return nil
 	}
+	for i := range networkIDs {
+		if err := lb.assignNetworkToRule(lbRule, networkIDs[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (lb *loadBalancer) assignNetworkToRule(lbRule *cloudstack.LoadBalancerRule, networkID string) error {
+	glog.V(4).Infof("assign network %q to rule %s", networkID, lbRule.Id)
 	p := &cloudstack.CustomServiceParams{}
 	if lb.projectID != "" {
 		p.SetParam("projectid", lb.projectID)
 	}
 	p.SetParam("id", lbRule.Id)
-	p.SetParam("networkids", networkIDs)
+	p.SetParam("networkids", []string{networkID})
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -829,18 +839,16 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, &result); err != nil {
 		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Id, lb.customAssignNetworksCommand, err)
 	}
-	glog.V(5).Infof("%s: result: %v", lb.customAssignNetworksCommand, result)
 	if jobid, ok := result["jobid"]; ok {
 		glog.V(4).Infof("Querying async job %s for load balancer rule %s", jobid, lbRule.Id)
 		pa := &cloudstack.QueryAsyncJobResultParams{}
 		pa.SetJobid(jobid)
 		_, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
 		if err != nil {
-			if strings.Contains(err.Error(), "is already mapped") {
+			if !strings.Contains(err.Error(), "is already mapped") {
 				// we ignore the error if is in the form `Network XXX is already mapped to load balancer`
-				return nil
+				return err
 			}
-			return err
 		}
 	}
 	return nil
