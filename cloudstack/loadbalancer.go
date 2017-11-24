@@ -162,6 +162,14 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 			return nil, err
 		}
 
+		defer func(rule *cloudstack.LoadBalancerRule) {
+			if err != nil {
+				if err := lb.deleteLoadBalancerRule(rule); err != nil {
+					glog.Errorf(err.Error())
+				}
+			}
+		}(lbRule)
+
 		glog.V(4).Infof("Assigning tag to load balancer rule: %v", lbRuleName)
 		if err := lb.assignTagsToRule(lbRule, service); err != nil {
 			return nil, err
