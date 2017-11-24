@@ -589,8 +589,7 @@ func (lb *loadBalancer) releaseLoadBalancerIP() error {
 	if disassociateCommand == "" {
 		disassociateCommand = "disassociateIpAddress"
 	}
-	var data map[string]interface{}
-	err = client.Custom.CustomRequest(disassociateCommand, pc, &data)
+	err = client.Custom.CustomRequest(disassociateCommand, pc, new(interface{}))
 	if err != nil {
 		return fmt.Errorf("error disassociate IP address using endpoint %q: %v", disassociateCommand, err)
 	}
@@ -817,7 +816,7 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 	if err != nil {
 		return err
 	}
-	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, nil); err != nil {
+	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, new(interface{})); err != nil {
 		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Id, lb.customAssignNetworksCommand, err)
 	}
 	return nil
