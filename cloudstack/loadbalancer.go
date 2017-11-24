@@ -167,13 +167,13 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 			return nil, err
 		}
 
-		glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
-		if err = lb.assignHostsToRule(lbRule, lb.hostIDs); err != nil {
+		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRuleName)
+		if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
 			return nil, err
 		}
 
-		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRuleName)
-		if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
+		glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
+		if err = lb.assignHostsToRule(lbRule, lb.hostIDs); err != nil {
 			return nil, err
 		}
 
@@ -240,13 +240,14 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 		assign, remove := symmetricDifference(lb.hostIDs, l.LoadBalancerRuleInstances)
 
 		if len(assign) > 0 {
-			glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lbRule.Name)
-			if err := lb.assignHostsToRule(lbRule, assign); err != nil {
-				return err
-			}
 
 			glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRule.Name)
 			if err := lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
+				return err
+			}
+
+			glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lbRule.Name)
+			if err := lb.assignHostsToRule(lbRule, assign); err != nil {
 				return err
 			}
 		}
