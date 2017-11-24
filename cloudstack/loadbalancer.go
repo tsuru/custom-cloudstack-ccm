@@ -816,8 +816,19 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 	if err != nil {
 		return err
 	}
-	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, new(interface{})); err != nil {
+	var result map[string]string
+	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, &result); err != nil {
 		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Id, lb.customAssignNetworksCommand, err)
+	}
+	glog.V(5).Infof("%s: result: %v", lb.customAssignNetworksCommand, result)
+	if jobid, ok := result["jobid"]; ok {
+		glog.V(4).Infof("Querying async job %s for load balancer rule %s", jobid, lbRule.Id)
+		pa := &cloudstack.QueryAsyncJobResultParams{}
+		pa.SetJobid(jobid)
+		_, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
