@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -835,6 +836,10 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 		pa.SetJobid(jobid)
 		_, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
 		if err != nil {
+			if strings.Contains(err.Error(), "is already mapped") {
+				// we ignore the error if is in the form `Network XXX is already mapped to load balancer`
+				return nil
+			}
 			return err
 		}
 	}
