@@ -330,7 +330,8 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 
 	client, err := lb.getClient()
 	if err != nil {
-		return nil, err
+		glog.V(4).Infof("unable to retrieve cloudstack client for load balancer: %v", lb.name)
+		return lb, nil
 	}
 
 	p := client.LoadBalancer.NewListLoadBalancerRulesParams()
