@@ -316,7 +316,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 		var ok bool
 		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.projectIDLabel)
 		if !ok {
-			return nil, fmt.Errorf("unable to retrive projectID for service: %v", service)
+			glog.V(4).Infof("unable to retrive projectID for service: %v", service)
 		}
 	}
 	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
