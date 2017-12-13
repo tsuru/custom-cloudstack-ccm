@@ -136,7 +136,7 @@ func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
 		}
 		return "", fmt.Errorf("error retrieving instance type: %v", err)
 	}
-	return instance.Serviceofferingname, nil
+	return instance.Serviceofferingid, nil
 }
 
 // InstanceTypeByProviderID returns the type of the specified instance.
