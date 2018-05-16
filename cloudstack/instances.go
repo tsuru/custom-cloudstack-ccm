@@ -22,9 +22,9 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
 
@@ -251,7 +251,7 @@ func (cs *CSCloud) getNodeByProviderID(id string) (*node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %v", err)
 	}
-	if len(kubeNodes.Items) > 0 {
+	if len(kubeNodes.Items) > 1 {
 		return nil, fmt.Errorf("multiple nodes found for provider id %s", id)
 	}
 	if len(kubeNodes.Items) == 0 {

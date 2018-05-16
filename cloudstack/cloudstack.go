@@ -183,7 +183,10 @@ func (cs *CSCloud) Instances() (cloudprovider.Instances, bool) {
 
 // Zones returns an implementation of Zones for CloudStack.
 func (cs *CSCloud) Zones() (cloudprovider.Zones, bool) {
-	return nil, false
+	if len(cs.environments) == 0 {
+		return nil, false
+	}
+	return cs, true
 }
 
 // Clusters returns an implementation of Clusters for CloudStack.
