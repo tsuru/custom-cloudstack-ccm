@@ -1,5 +1,5 @@
 //
-// Copyright 2017, Sander van Harmelen
+// Copyright 2018, Sander van Harmelen
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,72 +65,81 @@ type CloudStackClient struct {
 	apiKey  string       // Api key
 	secret  string       // Secret key
 	async   bool         // Wait for async calls to finish
+	options []OptionFunc // A list of option functions to apply to all API calls
 	timeout int64        // Max waiting timeout in seconds for async jobs to finish; defaults to 300 seconds
 
-	APIDiscovery     *APIDiscoveryService
-	Account          *AccountService
-	Address          *AddressService
-	AffinityGroup    *AffinityGroupService
-	Alert            *AlertService
-	Asyncjob         *AsyncjobService
-	Authentication   *AuthenticationService
-	AutoScale        *AutoScaleService
-	Baremetal        *BaremetalService
-	Certificate      *CertificateService
-	CloudIdentifier  *CloudIdentifierService
-	Cluster          *ClusterService
-	Configuration    *ConfigurationService
-	Custom           *CustomService
-	DiskOffering     *DiskOfferingService
-	Domain           *DomainService
-	Event            *EventService
-	Firewall         *FirewallService
-	GuestOS          *GuestOSService
-	Host             *HostService
-	Hypervisor       *HypervisorService
-	ISO              *ISOService
-	ImageStore       *ImageStoreService
-	InternalLB       *InternalLBService
-	LDAP             *LDAPService
-	Limit            *LimitService
-	LoadBalancer     *LoadBalancerService
-	NAT              *NATService
-	NetworkACL       *NetworkACLService
-	NetworkDevice    *NetworkDeviceService
-	NetworkOffering  *NetworkOfferingService
-	Network          *NetworkService
-	Nic              *NicService
-	NiciraNVP        *NiciraNVPService
-	OvsElement       *OvsElementService
-	Pod              *PodService
-	Pool             *PoolService
-	PortableIP       *PortableIPService
-	Project          *ProjectService
-	Quota            *QuotaService
-	Region           *RegionService
-	Resourcemetadata *ResourcemetadataService
-	Resourcetags     *ResourcetagsService
-	Router           *RouterService
-	SSH              *SSHService
-	SecurityGroup    *SecurityGroupService
-	ServiceOffering  *ServiceOfferingService
-	Snapshot         *SnapshotService
-	StoragePool      *StoragePoolService
-	StratosphereSSP  *StratosphereSSPService
-	Swift            *SwiftService
-	SystemCapacity   *SystemCapacityService
-	SystemVM         *SystemVMService
-	Template         *TemplateService
-	UCS              *UCSService
-	Usage            *UsageService
-	User             *UserService
-	VLAN             *VLANService
-	VMGroup          *VMGroupService
-	VPC              *VPCService
-	VPN              *VPNService
-	VirtualMachine   *VirtualMachineService
-	Volume           *VolumeService
-	Zone             *ZoneService
+	APIDiscovery        *APIDiscoveryService
+	Account             *AccountService
+	Address             *AddressService
+	AffinityGroup       *AffinityGroupService
+	Alert               *AlertService
+	Asyncjob            *AsyncjobService
+	Authentication      *AuthenticationService
+	AutoScale           *AutoScaleService
+	Baremetal           *BaremetalService
+	BigSwitchBCF        *BigSwitchBCFService
+	BrocadeVCS          *BrocadeVCSService
+	Certificate         *CertificateService
+	CloudIdentifier     *CloudIdentifierService
+	Cluster             *ClusterService
+	Configuration       *ConfigurationService
+	Custom              *CustomService
+	DiskOffering        *DiskOfferingService
+	Domain              *DomainService
+	Event               *EventService
+	ExtFirewall         *ExtFirewallService
+	ExtLoadBalancer     *ExtLoadBalancerService
+	ExternalDevice      *ExternalDeviceService
+	Firewall            *FirewallService
+	GuestOS             *GuestOSService
+	Host                *HostService
+	Hypervisor          *HypervisorService
+	ISO                 *ISOService
+	ImageStore          *ImageStoreService
+	InternalLB          *InternalLBService
+	LDAP                *LDAPService
+	Limit               *LimitService
+	LoadBalancer        *LoadBalancerService
+	NAT                 *NATService
+	NetworkACL          *NetworkACLService
+	NetworkDevice       *NetworkDeviceService
+	NetworkOffering     *NetworkOfferingService
+	Network             *NetworkService
+	Nic                 *NicService
+	NiciraNVP           *NiciraNVPService
+	NuageVSP            *NuageVSPService
+	OutofbandManagement *OutofbandManagementService
+	OvsElement          *OvsElementService
+	Pod                 *PodService
+	Pool                *PoolService
+	PortableIP          *PortableIPService
+	Project             *ProjectService
+	Quota               *QuotaService
+	Region              *RegionService
+	Resourcemetadata    *ResourcemetadataService
+	Resourcetags        *ResourcetagsService
+	Role                *RoleService
+	Router              *RouterService
+	SSH                 *SSHService
+	SecurityGroup       *SecurityGroupService
+	ServiceOffering     *ServiceOfferingService
+	Snapshot            *SnapshotService
+	StoragePool         *StoragePoolService
+	StratosphereSSP     *StratosphereSSPService
+	Swift               *SwiftService
+	SystemCapacity      *SystemCapacityService
+	SystemVM            *SystemVMService
+	Template            *TemplateService
+	UCS                 *UCSService
+	Usage               *UsageService
+	User                *UserService
+	VLAN                *VLANService
+	VMGroup             *VMGroupService
+	VPC                 *VPCService
+	VPN                 *VPNService
+	VirtualMachine      *VirtualMachineService
+	Volume              *VolumeService
+	Zone                *ZoneService
 }
 
 // Creates a new client for communicating with CloudStack
@@ -147,6 +156,7 @@ func newClient(apiurl string, apikey string, secret string, async bool, verifyss
 		apiKey:  apikey,
 		secret:  secret,
 		async:   async,
+		options: []OptionFunc{},
 		timeout: 300,
 	}
 	cs.APIDiscovery = NewAPIDiscoveryService(cs)
@@ -158,6 +168,8 @@ func newClient(apiurl string, apikey string, secret string, async bool, verifyss
 	cs.Authentication = NewAuthenticationService(cs)
 	cs.AutoScale = NewAutoScaleService(cs)
 	cs.Baremetal = NewBaremetalService(cs)
+	cs.BigSwitchBCF = NewBigSwitchBCFService(cs)
+	cs.BrocadeVCS = NewBrocadeVCSService(cs)
 	cs.Certificate = NewCertificateService(cs)
 	cs.CloudIdentifier = NewCloudIdentifierService(cs)
 	cs.Cluster = NewClusterService(cs)
@@ -166,6 +178,9 @@ func newClient(apiurl string, apikey string, secret string, async bool, verifyss
 	cs.DiskOffering = NewDiskOfferingService(cs)
 	cs.Domain = NewDomainService(cs)
 	cs.Event = NewEventService(cs)
+	cs.ExtFirewall = NewExtFirewallService(cs)
+	cs.ExtLoadBalancer = NewExtLoadBalancerService(cs)
+	cs.ExternalDevice = NewExternalDeviceService(cs)
 	cs.Firewall = NewFirewallService(cs)
 	cs.GuestOS = NewGuestOSService(cs)
 	cs.Host = NewHostService(cs)
@@ -183,6 +198,8 @@ func newClient(apiurl string, apikey string, secret string, async bool, verifyss
 	cs.Network = NewNetworkService(cs)
 	cs.Nic = NewNicService(cs)
 	cs.NiciraNVP = NewNiciraNVPService(cs)
+	cs.NuageVSP = NewNuageVSPService(cs)
+	cs.OutofbandManagement = NewOutofbandManagementService(cs)
 	cs.OvsElement = NewOvsElementService(cs)
 	cs.Pod = NewPodService(cs)
 	cs.Pool = NewPoolService(cs)
@@ -192,6 +209,7 @@ func newClient(apiurl string, apikey string, secret string, async bool, verifyss
 	cs.Region = NewRegionService(cs)
 	cs.Resourcemetadata = NewResourcemetadataService(cs)
 	cs.Resourcetags = NewResourcetagsService(cs)
+	cs.Role = NewRoleService(cs)
 	cs.Router = NewRouterService(cs)
 	cs.SSH = NewSSHService(cs)
 	cs.SecurityGroup = NewSecurityGroupService(cs)
@@ -237,6 +255,15 @@ func NewAsyncClient(apiurl string, apikey string, secret string, verifyssl bool)
 // seconds, to check if the async job is finished.
 func (cs *CloudStackClient) AsyncTimeout(timeoutInSeconds int64) {
 	cs.timeout = timeoutInSeconds
+}
+
+// Set any default options that would be added to all API calls that support it.
+func (cs *CloudStackClient) DefaultOptions(options ...OptionFunc) {
+	if options != nil {
+		cs.options = options
+	} else {
+		cs.options = []OptionFunc{}
+	}
 }
 
 var AsyncTimeoutErr = errors.New("Timeout while waiting for async job to finish")
@@ -505,6 +532,22 @@ func NewBaremetalService(cs *CloudStackClient) *BaremetalService {
 	return &BaremetalService{cs: cs}
 }
 
+type BigSwitchBCFService struct {
+	cs *CloudStackClient
+}
+
+func NewBigSwitchBCFService(cs *CloudStackClient) *BigSwitchBCFService {
+	return &BigSwitchBCFService{cs: cs}
+}
+
+type BrocadeVCSService struct {
+	cs *CloudStackClient
+}
+
+func NewBrocadeVCSService(cs *CloudStackClient) *BrocadeVCSService {
+	return &BrocadeVCSService{cs: cs}
+}
+
 type CertificateService struct {
 	cs *CloudStackClient
 }
@@ -567,6 +610,30 @@ type EventService struct {
 
 func NewEventService(cs *CloudStackClient) *EventService {
 	return &EventService{cs: cs}
+}
+
+type ExtFirewallService struct {
+	cs *CloudStackClient
+}
+
+func NewExtFirewallService(cs *CloudStackClient) *ExtFirewallService {
+	return &ExtFirewallService{cs: cs}
+}
+
+type ExtLoadBalancerService struct {
+	cs *CloudStackClient
+}
+
+func NewExtLoadBalancerService(cs *CloudStackClient) *ExtLoadBalancerService {
+	return &ExtLoadBalancerService{cs: cs}
+}
+
+type ExternalDeviceService struct {
+	cs *CloudStackClient
+}
+
+func NewExternalDeviceService(cs *CloudStackClient) *ExternalDeviceService {
+	return &ExternalDeviceService{cs: cs}
 }
 
 type FirewallService struct {
@@ -705,6 +772,22 @@ func NewNiciraNVPService(cs *CloudStackClient) *NiciraNVPService {
 	return &NiciraNVPService{cs: cs}
 }
 
+type NuageVSPService struct {
+	cs *CloudStackClient
+}
+
+func NewNuageVSPService(cs *CloudStackClient) *NuageVSPService {
+	return &NuageVSPService{cs: cs}
+}
+
+type OutofbandManagementService struct {
+	cs *CloudStackClient
+}
+
+func NewOutofbandManagementService(cs *CloudStackClient) *OutofbandManagementService {
+	return &OutofbandManagementService{cs: cs}
+}
+
 type OvsElementService struct {
 	cs *CloudStackClient
 }
@@ -775,6 +858,14 @@ type ResourcetagsService struct {
 
 func NewResourcetagsService(cs *CloudStackClient) *ResourcetagsService {
 	return &ResourcetagsService{cs: cs}
+}
+
+type RoleService struct {
+	cs *CloudStackClient
+}
+
+func NewRoleService(cs *CloudStackClient) *RoleService {
+	return &RoleService{cs: cs}
 }
 
 type RouterService struct {
