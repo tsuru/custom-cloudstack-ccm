@@ -63,17 +63,10 @@ func (cs *CSCloud) GetZoneByNodeName(nodeName types.NodeName) (cloudprovider.Zon
 	if err != nil {
 		return zone, fmt.Errorf("error retrieving node by name %q: %v", nodeName, err)
 	}
-	client, err := cs.clientForNode(node)
+	instance, err := cs.getInstanceForNode(node)
 	if err != nil {
-		return zone, err
-	}
-	instance, count, err := client.VirtualMachine.GetVirtualMachineByName(
-		string(nodeName),
-		cloudstack.WithProject(node.projectID),
-	)
-	if err != nil {
-		if count == 0 {
-			return zone, fmt.Errorf("could not find node by name: %v", nodeName)
+		if err == cloudprovider.InstanceNotFound {
+			return zone, err
 		}
 		return zone, fmt.Errorf("error retrieving zone: %v", err)
 	}
