@@ -223,7 +223,7 @@ func (cs *CSCloud) getInstanceForNode(n *node) (*cloudstack.VirtualMachine, erro
 		}
 		return nil, fmt.Errorf("error instance for node %v: %v", n, err)
 	}
-	glog.V(4).Infof("getInstanceForNode(%v): Found instance %v", n, instance)
+	glog.V(4).Infof("getInstanceForNode(%v): Found instance %#v", n, instance)
 	return instance, nil
 }
 
@@ -236,7 +236,7 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	glog.V(4).Infof("getNodeByName(%v): found node: %v", name, n)
+	glog.V(4).Infof("getNodeByName(%v): found node: %#v", name, n)
 	return n, nil
 }
 
@@ -281,7 +281,7 @@ func (cs *CSCloud) newNode(kubeNode metav1.ObjectMeta) (*node, error) {
 func (cs *CSCloud) clientForNode(n *node) (*cloudstack.CloudStackClient, error) {
 	client := cs.environments[n.environment].client
 	if client == nil {
-		return nil, fmt.Errorf("unable to retrieve client for node %v", n)
+		return nil, fmt.Errorf("unable to retrieve client for node %#v", n)
 	}
 	return cs.environments[n.environment].client, nil
 }
