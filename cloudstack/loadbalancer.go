@@ -75,7 +75,7 @@ func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1
 
 // EnsureLoadBalancer creates a new load balancer, or updates the existing one. Returns the status of the balancer.
 func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, nodes []*v1.Node) (status *v1.LoadBalancerStatus, err error) {
-	glog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %v)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, service.Spec.Ports, nodes)
+	glog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, service.Spec.Ports, nodes)
 
 	if len(service.Spec.Ports) == 0 {
 		return nil, fmt.Errorf("requested load balancer with no ports")
@@ -102,7 +102,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	lb.setAlgorithm(service)
 
-	glog.V(4).Infof("Ensuring Load Balancer: %+v", lb)
+	glog.V(4).Infof("Ensuring Load Balancer: %#v", lb)
 
 	if !lb.hasLoadBalancerIP() {
 		// Create or retrieve the load balancer IP.
@@ -207,7 +207,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 // UpdateLoadBalancer updates hosts under the specified load balancer.
 func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, nodes []*v1.Node) error {
-	glog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %v)", clusterName, service.Namespace, service.Name, nodes)
+	glog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
 
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
@@ -325,7 +325,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 		var ok bool
 		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.projectIDLabel)
 		if !ok {
-			glog.V(4).Infof("unable to retrive projectID for service: %v", service)
+			glog.V(4).Infof("unable to retrive projectID for service: %#v", service)
 		}
 	}
 	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
@@ -391,7 +391,7 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 
 	projectID, ok := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.projectIDLabel)
 	if !ok {
-		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %v", nodes[0])
+		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %#v", nodes[0])
 	}
 
 	var client *cloudstack.CloudStackClient
@@ -557,7 +557,7 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 	lb.ipAddr = result["ipaddress"]
 	lb.ipAddrID = result["id"]
 	if jobid, ok := result["jobid"]; ok {
-		glog.V(4).Infof("Querying async job %s for load balancer %s ", jobid, lb.ipAddrID)
+		glog.V(4).Infof("Querying async job %s for load balancer %s", jobid, lb.ipAddrID)
 		pa := &cloudstack.QueryAsyncJobResultParams{}
 		pa.SetJobid(jobid)
 		rawAsync, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
@@ -885,7 +885,7 @@ func (lb *loadBalancer) setAlgorithm(service *v1.Service) error {
 func (lb *loadBalancer) getClient() (*cloudstack.CloudStackClient, error) {
 	client := lb.CSCloud.environments[lb.environment].client
 	if client == nil {
-		return nil, fmt.Errorf("unable to retrive cloudstack client for lb: %v", lb)
+		return nil, fmt.Errorf("unable to retrive cloudstack client for lb: %#v", lb)
 	}
 	return client, nil
 }
