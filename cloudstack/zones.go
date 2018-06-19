@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
-	"github.com/xanzy/go-cloudstack/cloudstack"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
@@ -26,23 +25,9 @@ func (cs *CSCloud) GetZoneByProviderID(providerID string) (cloudprovider.Zone, e
 	if providerID == "" {
 		return zone, fmt.Errorf("empty providerID")
 	}
-	node, err := cs.getNodeByProviderID(providerID)
-	if err != nil {
-		return zone, fmt.Errorf("error retrieving node by providerID %q: %v", providerID, err)
-	}
-	client, err := cs.clientForNode(node)
+	instance, err := cs.instanceByProviderID(providerID)
 	if err != nil {
 		return zone, err
-	}
-	instance, count, err := client.VirtualMachine.GetVirtualMachineByID(
-		providerID,
-		cloudstack.WithProject(node.projectID),
-	)
-	if err != nil {
-		if count == 0 {
-			return zone, fmt.Errorf("could not find node by ID: %v", providerID)
-		}
-		return zone, fmt.Errorf("error retrieving zone: %v", err)
 	}
 	glog.V(2).Infof("Zone for providerID %v is %v", providerID, instance.Zonename)
 	zone.FailureDomain = instance.Zonename

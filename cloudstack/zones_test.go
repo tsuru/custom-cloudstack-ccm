@@ -95,7 +95,7 @@ func TestCSCloudGetZoneByProviderID(t *testing.T) {
 	}
 	zones, implemented := cs.Zones()
 	require.True(t, implemented)
-	zone, err := zones.GetZoneByProviderID("id123")
+	zone, err := zones.GetZoneByProviderID("custom-cloudstack:///myproj/id123")
 	require.Nil(t, err)
 	assert.Equal(t, cloudprovider.Zone{
 		FailureDomain: "myzone",
