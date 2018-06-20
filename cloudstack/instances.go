@@ -241,6 +241,10 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 }
 
 func (cs *CSCloud) newNode(kubeNode *v1.Node) (*node, error) {
+	name := kubeNode.Name
+	if n, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.nodeNameLabel); ok {
+		name = n
+	}
 	environment, _ := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.environmentLabel)
 	projectID, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.projectIDLabel)
 	if !ok {
@@ -249,7 +253,7 @@ func (cs *CSCloud) newNode(kubeNode *v1.Node) (*node, error) {
 	n := &node{
 		projectID:   projectID,
 		environment: environment,
-		name:        kubeNode.Name,
+		name:        name,
 		vmID:        kubeNode.Spec.ProviderID,
 	}
 	return n, nil
