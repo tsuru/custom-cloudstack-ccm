@@ -439,11 +439,12 @@ func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Servic
 	if cs.serviceLabel == "" || cs.nodeLabel == "" {
 		return nodes
 	}
-	labelValue := service.Labels[cs.serviceLabel]
+	labelValue, _ := getLabelOrAnnotation(service.ObjectMeta, cs.serviceLabel)
 
 	var filteredNodes []*v1.Node
 	for i := range nodes {
-		if nodes[i].Labels[cs.nodeLabel] != labelValue {
+		nodeLabelValue, _ := getLabelOrAnnotation(nodes[i].ObjectMeta, cs.nodeLabel)
+		if nodeLabelValue != labelValue {
 			continue
 		}
 		filteredNodes = append(filteredNodes, nodes[i])
