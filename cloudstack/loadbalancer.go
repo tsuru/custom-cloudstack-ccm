@@ -18,7 +18,10 @@ package cloudstack
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +50,12 @@ type loadBalancer struct {
 	networkIDs  []string
 	projectID   string
 	environment string
-	rules       map[string]*cloudstack.LoadBalancerRule
+	rule        *loadBalancerRule
+}
+
+type loadBalancerRule struct {
+	*cloudstack.LoadBalancerRule
+	AdditionalPortMap []string `json:"additionalportmap"`
 }
 
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
@@ -60,8 +68,8 @@ func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1
 		return nil, false, err
 	}
 
-	// If we don't have any rules, the load balancer does not exist.
-	if len(lb.rules) == 0 {
+	// If we don't have a rule, the load balancer does not exist.
+	if lb.rule == nil {
 		return nil, false, nil
 	}
 
@@ -132,68 +140,53 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	glog.V(4).Infof("Load balancer %v is associated with IP %v", lb.name, lb.ipAddr)
 
-	for _, port := range service.Spec.Ports {
-		lbRuleName := lb.name
+	lbRuleName := lb.name
 
-		// If the load balancer rule exists and is up-to-date, we move on to the next rule.
-		exists, needsUpdate, err := lb.checkLoadBalancerRule(lbRuleName, port)
-		if err != nil {
-			return nil, err
-		}
-		if exists && !needsUpdate {
-			glog.V(4).Infof("Load balancer rule %v is up-to-date", lbRuleName)
-			// Delete the rule from the map, to prevent it being deleted.
-			delete(lb.rules, lbRuleName)
-			continue
-		}
-
-		if needsUpdate {
-			glog.V(4).Infof("Updating load balancer rule: %v", lbRuleName)
-			if errLB := lb.updateLoadBalancerRule(lbRuleName); errLB != nil {
-				return nil, errLB
-			}
-			// Delete the rule from the map, to prevent it being deleted.
-			delete(lb.rules, lbRuleName)
-			continue
-		}
-
-		glog.V(4).Infof("Creating load balancer rule: %v", lbRuleName)
-		lbRule, err := lb.createLoadBalancerRule(lbRuleName, port)
-		if err != nil {
-			return nil, err
-		}
-
-		defer func(rule *cloudstack.LoadBalancerRule) {
-			if err != nil {
-				if err := lb.deleteLoadBalancerRule(rule); err != nil {
-					glog.Errorf(err.Error())
-				}
-			}
-		}(lbRule)
-
-		glog.V(4).Infof("Assigning tag to load balancer rule: %v", lbRuleName)
-		if err := lb.assignTagsToRule(lbRule, service); err != nil {
-			return nil, err
-		}
-
-		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRuleName)
-		if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
-			return nil, err
-		}
-
-		glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
-		if err = lb.assignHostsToRule(lbRule, lb.hostIDs); err != nil {
-			return nil, err
-		}
-
+	// If the load balancer rule exists and is up-to-date, we move on to the next rule.
+	exists, needsUpdate, err := lb.checkLoadBalancerRule(lbRuleName, service.Spec.Ports)
+	if err != nil {
+		return nil, err
+	}
+	if exists && !needsUpdate {
+		glog.V(4).Infof("Load balancer rule %v is up-to-date", lbRuleName)
+		return nil, nil
 	}
 
-	// Cleanup any rules that are now still in the rules map, as they are no longer needed.
-	for _, lbRule := range lb.rules {
-		glog.V(4).Infof("Deleting obsolete load balancer rule: %v", lbRule.Name)
-		if err := lb.deleteLoadBalancerRule(lbRule); err != nil {
-			return nil, err
+	if needsUpdate {
+		glog.V(4).Infof("Updating load balancer rule: %v", lbRuleName)
+		if errLB := lb.updateLoadBalancerRule(lbRuleName); errLB != nil {
+			return nil, errLB
 		}
+		return nil, nil
+	}
+
+	glog.V(4).Infof("Creating load balancer rule: %v", lbRuleName)
+	lbRule, err := lb.createLoadBalancerRule(lbRuleName, service.Spec.Ports)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func(rule *loadBalancerRule) {
+		if err != nil {
+			if err := lb.deleteLoadBalancerRule(rule); err != nil {
+				glog.Errorf(err.Error())
+			}
+		}
+	}(lbRule)
+
+	glog.V(4).Infof("Assigning tag to load balancer rule: %v", lbRuleName)
+	if err := lb.assignTagsToRule(lbRule, service); err != nil {
+		return nil, err
+	}
+
+	glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRuleName)
+	if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
+		return nil, err
+	}
+
+	glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
+	if err = lb.assignHostsToRule(lbRule, lb.hostIDs); err != nil {
+		return nil, err
 	}
 
 	status = &v1.LoadBalancerStatus{}
@@ -237,35 +230,38 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 	if err != nil {
 		return err
 	}
-	for _, lbRule := range lb.rules {
-		p := client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lbRule.Id)
 
-		// Retrieve all VMs currently associated to this load balancer rule.
-		l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(p)
-		if err != nil {
-			return fmt.Errorf("error retrieving associated instances: %v", err)
+	if lb.rule == nil {
+		return nil
+	}
+
+	p := client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lb.rule.Id)
+
+	// Retrieve all VMs currently associated to this load balancer rule.
+	l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(p)
+	if err != nil {
+		return fmt.Errorf("error retrieving associated instances: %v", err)
+	}
+
+	assign, remove := symmetricDifference(lb.hostIDs, l.LoadBalancerRuleInstances)
+
+	if len(assign) > 0 {
+
+		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lb.rule.Name)
+		if err := lb.assignNetworksToRule(lb.rule, lb.networkIDs); err != nil {
+			return err
 		}
 
-		assign, remove := symmetricDifference(lb.hostIDs, l.LoadBalancerRuleInstances)
-
-		if len(assign) > 0 {
-
-			glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRule.Name)
-			if err := lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
-				return err
-			}
-
-			glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lbRule.Name)
-			if err := lb.assignHostsToRule(lbRule, assign); err != nil {
-				return err
-			}
+		glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lb.rule.Name)
+		if err := lb.assignHostsToRule(lb.rule, assign); err != nil {
+			return err
 		}
+	}
 
-		if len(remove) > 0 {
-			glog.V(4).Infof("Removing old hosts (%v) from load balancer rule: %v", assign, lbRule.Name)
-			if err := lb.removeHostsFromRule(lbRule, remove); err != nil {
-				return err
-			}
+	if len(remove) > 0 {
+		glog.V(4).Infof("Removing old hosts (%v) from load balancer rule: %v", assign, lb.rule.Name)
+		if err := lb.removeHostsFromRule(lb.rule, remove); err != nil {
+			return err
 		}
 	}
 
@@ -302,9 +298,9 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 		return err
 	}
 
-	for _, lbRule := range lb.rules {
-		glog.V(4).Infof("Deleting load balancer rule: %v", lbRule.Name)
-		if err := lb.deleteLoadBalancerRule(lbRule); err != nil {
+	if lb.rule != nil {
+		glog.V(4).Infof("Deleting load balancer rule: %v", lb.rule.Name)
+		if err := lb.deleteLoadBalancerRule(lb.rule); err != nil {
 			return err
 		}
 	}
@@ -334,7 +330,6 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 		name:        cs.getLoadBalancerName(*service),
 		projectID:   projectID,
 		environment: environment,
-		rules:       make(map[string]*cloudstack.LoadBalancerRule),
 	}
 
 	client, err := lb.getClient()
@@ -356,18 +351,17 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 		return nil, fmt.Errorf("error retrieving load balancer rules: %v", err)
 	}
 
-	for _, lbRule := range l.LoadBalancerRules {
-		lb.rules[lbRule.Name] = lbRule
-
-		if lb.ipAddr != "" && lb.ipAddr != lbRule.Publicip {
-			glog.Warningf("Load balancer for service %v/%v has rules associated with different IP's: %v, %v", service.Namespace, service.Name, lb.ipAddr, lbRule.Publicip)
-		}
-
-		lb.ipAddr = lbRule.Publicip
-		lb.ipAddrID = lbRule.Publicipid
+	if l.Count > 1 {
+		return nil, fmt.Errorf("Load balancer for service %v/%v has too many rules associated: %#v", service.Namespace, service.Name, l.LoadBalancerRules)
+	}
+	if l.Count == 0 {
+		return lb, nil
 	}
 
-	glog.V(4).Infof("Load balancer %v contains %d rule(s)", lb.name, len(lb.rules))
+	lb.rule = &loadBalancerRule{LoadBalancerRule: l.LoadBalancerRules[0]}
+	if lb.ipAddr != "" && lb.ipAddr != lb.rule.Publicip {
+		glog.Warningf("Load balancer for service %v/%v has rules associated with different IP's: %v, %v", service.Namespace, service.Name, lb.ipAddr, lb.rule.Publicip)
+	}
 
 	return lb, nil
 }
@@ -608,19 +602,34 @@ func (lb *loadBalancer) releaseLoadBalancerIP() error {
 
 // checkLoadBalancerRule checks if the rule already exists and if it does, if it can be updated. If
 // it does exist but cannot be updated, it will delete the existing rule so it can be created again.
-func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, port v1.ServicePort) (bool, bool, error) {
-	lbRule, ok := lb.rules[lbRuleName]
-	if !ok {
+func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.ServicePort) (bool, bool, error) {
+	if lb.rule == nil {
 		return false, false, nil
 	}
+	if len(ports) == 0 {
+		return false, false, errors.New("invalid ports")
+	}
+
+	sort.Slice(ports, func(i, j int) bool {
+		return ports[i].Port < ports[j].Port
+	})
+	var additionalPorts []string
+	for _, p := range ports[1:] {
+		additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+	}
+
+	sort.Strings(lb.rule.AdditionalPortMap)
+
+	mapEquals := reflect.DeepEqual(additionalPorts, lb.rule.AdditionalPortMap)
 
 	// Check if any of the values we cannot update (those that require a new load balancer rule) are changed.
-	if lbRule.Publicip == lb.ipAddr && lbRule.Privateport == strconv.Itoa(int(port.NodePort)) && lbRule.Publicport == strconv.Itoa(int(port.Port)) {
-		return true, lbRule.Algorithm != lb.algorithm, nil
+	if lb.rule.Publicip == lb.ipAddr && lb.rule.Privateport == strconv.Itoa(int(ports[0].NodePort)) &&
+		lb.rule.Publicport == strconv.Itoa(int(ports[0].Port)) && mapEquals {
+		return true, lb.rule.Algorithm != lb.algorithm, nil
 	}
 
 	// Delete the load balancer rule so we can create a new one using the new values.
-	if err := lb.deleteLoadBalancerRule(lbRule); err != nil {
+	if err := lb.deleteLoadBalancerRule(lb.rule); err != nil {
 		return false, false, err
 	}
 
@@ -629,13 +638,12 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, port v1.Service
 
 // updateLoadBalancerRule updates a load balancer rule.
 func (lb *loadBalancer) updateLoadBalancerRule(lbRuleName string) error {
-	lbRule := lb.rules[lbRuleName]
 	client, err := lb.getClient()
 	if err != nil {
 		return err
 	}
 
-	p := client.LoadBalancer.NewUpdateLoadBalancerRuleParams(lbRule.Id)
+	p := client.LoadBalancer.NewUpdateLoadBalancerRuleParams(lb.rule.Id)
 	p.SetAlgorithm(lb.algorithm)
 
 	_, err = client.LoadBalancer.UpdateLoadBalancerRule(p)
@@ -643,56 +651,73 @@ func (lb *loadBalancer) updateLoadBalancerRule(lbRuleName string) error {
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
-func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, port v1.ServicePort) (*cloudstack.LoadBalancerRule, error) {
+func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.ServicePort) (*loadBalancerRule, error) {
 	client, err := lb.getClient()
 	if err != nil {
 		return nil, err
 	}
-	p := client.LoadBalancer.NewCreateLoadBalancerRuleParams(
-		lb.algorithm,
-		lbRuleName,
-		int(port.NodePort),
-		int(port.Port),
-	)
+	if len(ports) == 0 {
+		return nil, errors.New("missing ports")
+	}
 
-	p.SetNetworkid(lb.networkIDs[0])
-	p.SetPublicipid(lb.ipAddrID)
+	sort.Slice(ports, func(i, j int) bool {
+		return ports[i].Port < ports[j].Port
+	})
 
-	switch port.Protocol {
+	p := &cloudstack.CustomServiceParams{}
+	p.SetParam("algorithm", lb.algorithm)
+	p.SetParam("name", lbRuleName)
+	p.SetParam("privateport", int(ports[0].NodePort))
+	p.SetParam("publicport", int(ports[0].Port))
+	p.SetParam("networkid", lb.networkIDs[0])
+	p.SetParam("publicipid", lb.ipAddrID)
+
+	switch ports[0].Protocol {
 	case v1.ProtocolTCP:
-		p.SetProtocol("TCP")
+		p.SetParam("protocol", "TCP")
 	case v1.ProtocolUDP:
-		p.SetProtocol("UDP")
+		p.SetParam("protocol", "UDP")
 	default:
-		return nil, fmt.Errorf("unsupported load balancer protocol: %v", port.Protocol)
+		return nil, fmt.Errorf("unsupported load balancer protocol: %v", ports[0].Protocol)
+	}
+
+	var additionalPorts []string
+	for _, p := range ports[1:] {
+		additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+	}
+	if len(additionalPorts) > 0 {
+		p.SetParam("additionalportmap", strings.Join(additionalPorts, ","))
 	}
 
 	// Do not create corresponding firewall rule.
-	p.SetOpenfirewall(false)
+	p.SetParam("openfirewall", false)
 
 	// Create a new load balancer rule.
-	r, err := client.LoadBalancer.CreateLoadBalancerRule(p)
+	r := cloudstack.CreateLoadBalancerRuleResponse{}
+	err = client.Custom.CustomRequest("createLoadBalancerRule", p, &r)
 	if err != nil {
 		return nil, fmt.Errorf("error creating load balancer rule %v: %v", lbRuleName, err)
 	}
 
-	lbRule := &cloudstack.LoadBalancerRule{
-		Id:          r.Id,
-		Algorithm:   r.Algorithm,
-		Cidrlist:    r.Cidrlist,
-		Name:        r.Name,
-		Networkid:   r.Networkid,
-		Privateport: r.Privateport,
-		Publicport:  r.Publicport,
-		Publicip:    r.Publicip,
-		Publicipid:  r.Publicipid,
+	lbRule := &loadBalancerRule{
+		LoadBalancerRule: &cloudstack.LoadBalancerRule{
+			Id:          r.Id,
+			Algorithm:   r.Algorithm,
+			Cidrlist:    r.Cidrlist,
+			Name:        r.Name,
+			Networkid:   r.Networkid,
+			Privateport: r.Privateport,
+			Publicport:  r.Publicport,
+			Publicip:    r.Publicip,
+			Publicipid:  r.Publicipid,
+		},
 	}
 
 	return lbRule, nil
 }
 
 // deleteLoadBalancerRule deletes a load balancer rule.
-func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRule) error {
+func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *loadBalancerRule) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -702,10 +727,7 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *cloudstack.LoadBalancerRu
 	if _, err := client.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
 		return fmt.Errorf("error deleting load balancer rule %v: %v", lbRule.Name, err)
 	}
-
-	// Delete the rule from the map as it no longer exists
-	delete(lb.rules, lbRule.Name)
-
+	lb.rule = nil
 	return nil
 }
 
@@ -735,13 +757,8 @@ func shouldManageLB(lb *loadBalancer, service *v1.Service) (bool, error) {
 }
 
 func (lb *loadBalancer) hasTag(k, v string) (bool, error) {
-	if len(lb.rules) == 0 {
+	if lb.rule == nil {
 		return false, nil
-	}
-	var id string
-	for _, r := range lb.rules {
-		id = r.Id
-		break
 	}
 	client, err := lb.getClient()
 	if err != nil {
@@ -751,7 +768,7 @@ func (lb *loadBalancer) hasTag(k, v string) (bool, error) {
 	if lb.projectID != "" {
 		p.SetProjectid(lb.projectID)
 	}
-	p.SetResourceid(id)
+	p.SetResourceid(lb.rule.Id)
 	p.SetResourcetype("LoadBalancer")
 	p.SetKey(k)
 	p.SetValue(v)
@@ -767,21 +784,16 @@ func (lb *loadBalancer) deleteTags(service *v1.Service) error {
 	if err != nil {
 		return err
 	}
-	if len(lb.rules) == 0 {
+	if lb.rule == nil {
 		return nil
 	}
-	var id string
-	for _, r := range lb.rules {
-		id = r.Id
-		break
-	}
-	p := client.Resourcetags.NewDeleteTagsParams([]string{id}, "LoadBalancer")
+	p := client.Resourcetags.NewDeleteTagsParams([]string{lb.rule.Id}, "LoadBalancer")
 	p.SetTags(map[string]string{cloudProviderTag: ProviderName, serviceTag: service.Name})
 	_, err = client.Resourcetags.DeleteTags(p)
 	return err
 }
 
-func (lb *loadBalancer) assignTagsToRule(lbRule *cloudstack.LoadBalancerRule, service *v1.Service) error {
+func (lb *loadBalancer) assignTagsToRule(lbRule *loadBalancerRule, service *v1.Service) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -796,7 +808,7 @@ func (lb *loadBalancer) assignTagsToRule(lbRule *cloudstack.LoadBalancerRule, se
 }
 
 // assignHostsToRule assigns hosts to a load balancer rule.
-func (lb *loadBalancer) assignHostsToRule(lbRule *cloudstack.LoadBalancerRule, hostIDs []string) error {
+func (lb *loadBalancer) assignHostsToRule(lbRule *loadBalancerRule, hostIDs []string) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -812,7 +824,7 @@ func (lb *loadBalancer) assignHostsToRule(lbRule *cloudstack.LoadBalancerRule, h
 }
 
 // assignNetworksToRule assigns networks to a load balancer rule.
-func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule, networkIDs []string) error {
+func (lb *loadBalancer) assignNetworksToRule(lbRule *loadBalancerRule, networkIDs []string) error {
 	if lb.customAssignNetworksCommand == "" {
 		return nil
 	}
@@ -824,7 +836,7 @@ func (lb *loadBalancer) assignNetworksToRule(lbRule *cloudstack.LoadBalancerRule
 	return nil
 }
 
-func (lb *loadBalancer) assignNetworkToRule(lbRule *cloudstack.LoadBalancerRule, networkID string) error {
+func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID string) error {
 	glog.V(4).Infof("assign network %q to rule %s", networkID, lbRule.Id)
 	p := &cloudstack.CustomServiceParams{}
 	if lb.projectID != "" {
@@ -856,7 +868,7 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *cloudstack.LoadBalancerRule,
 }
 
 // removeHostsFromRule removes hosts from a load balancer rule.
-func (lb *loadBalancer) removeHostsFromRule(lbRule *cloudstack.LoadBalancerRule, hostIDs []string) error {
+func (lb *loadBalancer) removeHostsFromRule(lbRule *loadBalancerRule, hostIDs []string) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
