@@ -338,32 +338,44 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 		return lb, nil
 	}
 
-	p := client.LoadBalancer.NewListLoadBalancerRulesParams()
-	p.SetKeyword(lb.name)
-	p.SetListall(true)
-
-	if projectID != "" {
-		p.SetProjectid(projectID)
-	}
-
-	l, err := client.LoadBalancer.ListLoadBalancerRules(p)
+	lb.rule, err = getLoadBalancerRule(client, lb.name, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving load balancer rules: %v", err)
+		return nil, fmt.Errorf("load balancer for service %v/%v get rule error: %v", service.Namespace, service.Name, err)
 	}
 
-	if l.Count > 1 {
-		return nil, fmt.Errorf("Load balancer for service %v/%v has too many rules associated: %#v", service.Namespace, service.Name, l.LoadBalancerRules)
-	}
-	if l.Count == 0 {
-		return lb, nil
-	}
-
-	lb.rule = &loadBalancerRule{LoadBalancerRule: l.LoadBalancerRules[0]}
 	if lb.ipAddr != "" && lb.ipAddr != lb.rule.Publicip {
 		glog.Warningf("Load balancer for service %v/%v has rules associated with different IP's: %v, %v", service.Namespace, service.Name, lb.ipAddr, lb.rule.Publicip)
 	}
 
 	return lb, nil
+}
+
+func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID string) (*loadBalancerRule, error) {
+	pc := &cloudstack.CustomServiceParams{}
+
+	pc.SetParam("keyword", lbName)
+	pc.SetParam("listall", true)
+	if projectID != "" {
+		pc.SetParam("projectid", projectID)
+	}
+
+	var result struct {
+		Count             int                 `json:"count"`
+		LoadBalancerRules []*loadBalancerRule `json:"loadbalancerrule"`
+	}
+
+	err := client.Custom.CustomRequest("listLoadBalancerRules", pc, &result)
+	if err != nil {
+		return nil, err
+	}
+	if result.Count > 1 {
+		return nil, fmt.Errorf("lb %q too many rules associated: %#v", lbName, result.LoadBalancerRules)
+	}
+	if result.Count == 0 {
+		return nil, nil
+	}
+
+	return result.LoadBalancerRules[0], nil
 }
 
 // extractIDs extracts the VM ID for each node, their unique network IDs and project ID
