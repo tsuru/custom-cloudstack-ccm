@@ -299,7 +299,6 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 	}
 
 	if lb.rule != nil {
-		glog.V(4).Infof("Deleting load balancer rule: %v", lb.rule.Name)
 		if err := lb.deleteLoadBalancerRule(lb.rule); err != nil {
 			return err
 		}
@@ -613,6 +612,28 @@ func (lb *loadBalancer) releaseLoadBalancerIP() error {
 	return nil
 }
 
+func sortPorts(ports []v1.ServicePort) {
+	sort.Slice(ports, func(i, j int) bool {
+		return ports[i].Port < ports[j].Port
+	})
+}
+
+func comparePorts(ports []v1.ServicePort, rule *loadBalancerRule) bool {
+	sortPorts(ports)
+	var additionalPorts []string
+	for _, p := range ports[1:] {
+		additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+	}
+	sort.Strings(additionalPorts)
+	sort.Strings(rule.AdditionalPortMap)
+	if len(rule.AdditionalPortMap) == 0 {
+		rule.AdditionalPortMap = nil
+	}
+	return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
+		rule.Privateport == strconv.Itoa(int(ports[0].NodePort)) &&
+		rule.Publicport == strconv.Itoa(int(ports[0].Port))
+}
+
 // checkLoadBalancerRule checks if the rule already exists and if it does, if it can be updated. If
 // it does exist but cannot be updated, it will delete the existing rule so it can be created again.
 func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.ServicePort) (bool, bool, error) {
@@ -623,21 +644,8 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 		return false, false, errors.New("invalid ports")
 	}
 
-	sort.Slice(ports, func(i, j int) bool {
-		return ports[i].Port < ports[j].Port
-	})
-	var additionalPorts []string
-	for _, p := range ports[1:] {
-		additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
-	}
-
-	sort.Strings(lb.rule.AdditionalPortMap)
-
-	mapEquals := reflect.DeepEqual(additionalPorts, lb.rule.AdditionalPortMap)
-
 	// Check if any of the values we cannot update (those that require a new load balancer rule) are changed.
-	if lb.rule.Publicip == lb.ipAddr && lb.rule.Privateport == strconv.Itoa(int(ports[0].NodePort)) &&
-		lb.rule.Publicport == strconv.Itoa(int(ports[0].Port)) && mapEquals {
+	if lb.rule.Publicip == lb.ipAddr && comparePorts(ports, lb.rule) {
 		return true, lb.rule.Algorithm != lb.algorithm, nil
 	}
 
@@ -673,9 +681,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 		return nil, errors.New("missing ports")
 	}
 
-	sort.Slice(ports, func(i, j int) bool {
-		return ports[i].Port < ports[j].Port
-	})
+	sortPorts(ports)
 
 	p := &cloudstack.CustomServiceParams{}
 	p.SetParam("algorithm", lb.algorithm)
@@ -731,6 +737,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 
 // deleteLoadBalancerRule deletes a load balancer rule.
 func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *loadBalancerRule) error {
+	glog.V(4).Infof("Deleting load balancer rule: %v", lbRule.Name)
 	client, err := lb.getClient()
 	if err != nil {
 		return err
