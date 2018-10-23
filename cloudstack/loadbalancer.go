@@ -334,7 +334,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 
 	client, err := lb.getClient()
 	if err != nil {
-		glog.V(4).Infof("unable to retrieve cloudstack client for load balancer: %v", lb.name)
+		glog.V(4).Infof("unable to retrieve cloudstack client for load balancer %q: %v", lb.name, err)
 		return lb, nil
 	}
 
@@ -343,8 +343,9 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 		return nil, fmt.Errorf("load balancer for service %v/%v get rule error: %v", service.Namespace, service.Name, err)
 	}
 
-	if lb.ipAddr != "" && lb.ipAddr != lb.rule.Publicip {
-		glog.Warningf("Load balancer for service %v/%v has rules associated with different IP's: %v, %v", service.Namespace, service.Name, lb.ipAddr, lb.rule.Publicip)
+	if lb.rule != nil {
+		lb.ipAddr = lb.rule.Publicip
+		lb.ipAddrID = lb.rule.Publicipid
 	}
 
 	return lb, nil
