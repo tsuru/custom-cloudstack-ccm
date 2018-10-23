@@ -1,9 +1,13 @@
 package cloudstack
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/xanzy/go-cloudstack/cloudstack"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -34,5 +38,162 @@ func TestFilterNodesMatchingLabels(t *testing.T) {
 				t.Errorf("Expected %+v. Got %+v.", tc.expectedNodes, filtered)
 			}
 		})
+	}
+}
+
+func TestCheckLoadBalancerRule(t *testing.T) {
+	tests := []struct {
+		svcIP        string
+		svcPorts     []v1.ServicePort
+		rule         *loadBalancerRule
+		existing     bool
+		needsUpdate  bool
+		deleteCalled bool
+		errorMatches string
+	}{
+		{
+			existing:    false,
+			needsUpdate: false,
+		},
+		{
+			svcIP: "10.0.0.1",
+			svcPorts: []v1.ServicePort{
+				{Port: 1234, NodePort: 4567},
+			},
+			rule: &loadBalancerRule{
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "1234",
+					Privateport: "4567",
+					Publicip:    "10.0.0.1",
+				},
+			},
+			existing:    true,
+			needsUpdate: false,
+		},
+		{
+			svcIP: "10.0.0.1",
+			svcPorts: []v1.ServicePort{
+				{Port: 1234, NodePort: 4567},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "1234",
+					Privateport: "4567",
+					Publicip:    "10.0.0.1",
+				},
+			},
+			existing:    true,
+			needsUpdate: false,
+		},
+		{
+			svcIP: "10.0.0.2",
+			svcPorts: []v1.ServicePort{
+				{Port: 1234, NodePort: 4567},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "1234",
+					Privateport: "4567",
+					Publicip:    "10.0.0.1",
+				},
+			},
+			existing:     false,
+			needsUpdate:  false,
+			deleteCalled: true,
+		},
+		{
+			svcPorts: []v1.ServicePort{
+				{Port: 5, NodePort: 6},
+				{Port: 2, NodePort: 20},
+				{Port: 10, NodePort: 5},
+				{Port: 3, NodePort: 4},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{
+					"3:4",
+					"5:6",
+					"10:5",
+				},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "2",
+					Privateport: "20",
+				},
+			},
+			existing:    true,
+			needsUpdate: false,
+		},
+		{
+			svcPorts: []v1.ServicePort{
+				{Port: 5, NodePort: 6},
+				{Port: 2, NodePort: 20},
+				{Port: 10, NodePort: 5},
+				{Port: 3, NodePort: 4},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "2",
+					Privateport: "20",
+				},
+			},
+			existing:     false,
+			needsUpdate:  false,
+			deleteCalled: true,
+		},
+		{
+			svcPorts: []v1.ServicePort{
+				{Port: 1, NodePort: 2},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "1",
+					Privateport: "2",
+					Algorithm:   "x",
+				},
+			},
+			existing:     true,
+			needsUpdate:  true,
+			deleteCalled: false,
+		},
+	}
+
+	var deleteCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, r.URL.Query().Get("command"), "deleteLoadBalancerRule")
+		deleteCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	fakeCli := cloudstack.NewAsyncClient(srv.URL, "", "", false)
+	cloud := &CSCloud{
+		environments: map[string]CSEnvironment{
+			"test": CSEnvironment{
+				client: fakeCli,
+			},
+		},
+	}
+	for _, tt := range tests {
+		deleteCalled = false
+		lb := loadBalancer{
+			name:        "test",
+			environment: "test",
+			CSCloud:     cloud,
+			ipAddr:      tt.svcIP,
+			rule:        tt.rule,
+		}
+		existing, needsUpdate, err := lb.checkLoadBalancerRule("name", tt.svcPorts)
+		if tt.errorMatches != "" {
+			assert.Error(t, err)
+			assert.Regexp(t, tt.errorMatches, err.Error())
+			assert.False(t, existing)
+			assert.False(t, needsUpdate)
+		} else {
+			assert.Equal(t, tt.existing, existing)
+			assert.Equal(t, tt.needsUpdate, needsUpdate)
+		}
+		assert.Equal(t, tt.deleteCalled, deleteCalled)
 	}
 }
