@@ -649,7 +649,7 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 		return true, lb.rule.Algorithm != lb.algorithm, nil
 	}
 
-	glog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb, ports)
+	glog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
 
 	// Delete the load balancer rule so we can create a new one using the new values.
 	if err := lb.deleteLoadBalancerRule(lb.rule); err != nil {
