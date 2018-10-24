@@ -333,13 +333,13 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string) (*load
 
 	client, err := lb.getClient()
 	if err != nil {
-		glog.V(4).Infof("unable to retrieve cloudstack client for load balancer %q: %v", lb.name, err)
+		glog.V(4).Infof("unable to retrieve cloudstack client for load balancer %q for service %v/%v: %v", lb.name, service.Namespace, service.Name, err)
 		return lb, nil
 	}
 
 	lb.rule, err = getLoadBalancerRule(client, lb.name, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("load balancer for service %v/%v get rule error: %v", service.Namespace, service.Name, err)
+		return nil, fmt.Errorf("load balancer %s for service %v/%v get rule error: %v", lb.name, service.Namespace, service.Name, err)
 	}
 
 	if lb.rule != nil {
@@ -648,6 +648,8 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 	if lb.rule.Publicip == lb.ipAddr && comparePorts(ports, lb.rule) {
 		return true, lb.rule.Algorithm != lb.algorithm, nil
 	}
+
+	glog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb, ports)
 
 	// Delete the load balancer rule so we can create a new one using the new values.
 	if err := lb.deleteLoadBalancerRule(lb.rule); err != nil {
