@@ -121,14 +121,15 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 		if lb.ipAddr != "" && lb.ipAddr != service.Spec.LoadBalancerIP {
 			defer func(lb *loadBalancer) {
 				if err != nil {
-					if err := lb.releaseLoadBalancerIP(); err != nil {
-						glog.Errorf(err.Error())
+					if releaseErr := lb.releaseLoadBalancerIP(); releaseErr != nil {
+						glog.Errorf(releaseErr.Error())
 					}
 				}
 			}(lb)
 		}
 	} else {
-		manage, err := shouldManageLB(lb, service)
+		var manage bool
+		manage, err = shouldManageLB(lb, service)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check if LB should be managed: %v", err)
 		}
@@ -140,61 +141,60 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	glog.V(4).Infof("Load balancer %v is associated with IP %v", lb.name, lb.ipAddr)
 
-	lbRuleName := lb.name
-
-	// If the load balancer rule exists and is up-to-date, we move on to the next rule.
-	exists, needsUpdate, err := lb.checkLoadBalancerRule(lbRuleName, service.Spec.Ports)
-	if err != nil {
-		return nil, err
-	}
-	if exists && !needsUpdate {
-		glog.V(4).Infof("Load balancer rule %v is up-to-date", lbRuleName)
-		return nil, nil
-	}
-
-	if needsUpdate {
-		glog.V(4).Infof("Updating load balancer rule: %v", lbRuleName)
-		if errLB := lb.updateLoadBalancerRule(lbRuleName); errLB != nil {
-			return nil, errLB
-		}
-		return nil, nil
-	}
-
-	glog.V(4).Infof("Creating load balancer rule: %v", lbRuleName)
-	lbRule, err := lb.createLoadBalancerRule(lbRuleName, service.Spec.Ports)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func(rule *loadBalancerRule) {
-		if err != nil {
-			if err := lb.deleteLoadBalancerRule(rule); err != nil {
-				glog.Errorf(err.Error())
-			}
-		}
-	}(lbRule)
-
-	glog.V(4).Infof("Assigning tag to load balancer rule: %v", lbRuleName)
-	if err := lb.assignTagsToRule(lbRule, service); err != nil {
-		return nil, err
-	}
-
-	glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lbRuleName)
-	if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
-		return nil, err
-	}
-
-	glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lbRuleName)
-	if err = lb.assignHostsToRule(lbRule, lb.hostIDs); err != nil {
-		return nil, err
-	}
-
 	status = &v1.LoadBalancerStatus{}
 	status.Ingress = []v1.LoadBalancerIngress{{IP: lb.ipAddr, Hostname: lb.name}}
 
 	if lb.projectID != "" && service.Labels[cs.projectIDLabel] == "" {
 		service.Labels[cs.projectIDLabel] = lb.projectID
 	}
+
+	// If the load balancer rule exists and is up-to-date, we move on to the next rule.
+	exists, needsUpdate, err := lb.checkLoadBalancerRule(lb.name, service.Spec.Ports)
+	if err != nil {
+		return nil, err
+	}
+	if exists && !needsUpdate {
+		glog.V(4).Infof("Load balancer rule %v is up-to-date", lb.name)
+		return status, nil
+	}
+
+	if needsUpdate {
+		glog.V(4).Infof("Updating load balancer rule: %v", lb.name)
+		if errLB := lb.updateLoadBalancerRule(lb.name); errLB != nil {
+			return nil, errLB
+		}
+		return status, nil
+	}
+
+	glog.V(4).Infof("Creating load balancer rule: %v", lb.name)
+	lbRule, err := lb.createLoadBalancerRule(lb.name, service.Spec.Ports)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func(rule *loadBalancerRule) {
+		if err != nil {
+			if deleteErr := lb.deleteLoadBalancerRule(rule); deleteErr != nil {
+				glog.Errorf(deleteErr.Error())
+			}
+		}
+	}(lbRule)
+
+	glog.V(4).Infof("Assigning tag to load balancer rule: %v", lb.name)
+	if err = lb.assignTagsToRule(lbRule, service); err != nil {
+		return nil, err
+	}
+
+	glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", lb.networkIDs, lb.name)
+	if err = lb.assignNetworksToRule(lbRule, lb.networkIDs); err != nil {
+		return nil, err
+	}
+
+	glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", lb.hostIDs, lb.name)
+	if err = lb.assignHostsToRule(lbRule, lb.hostIDs); err != nil {
+		return nil, err
+	}
+
 	return status, nil
 }
 
