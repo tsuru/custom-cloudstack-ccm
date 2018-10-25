@@ -652,6 +652,9 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 			return false, false, err
 		}
 		needsUpdate := lb.rule.Algorithm != lb.algorithm || missingTags
+		if needsUpdate {
+			glog.V(4).Infof("checkLoadBalancerRule found differences, needsUpdate true for LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
+		}
 		return true, needsUpdate, nil
 	}
 
