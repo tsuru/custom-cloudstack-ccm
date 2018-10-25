@@ -1,6 +1,7 @@
 package cloudstack
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -65,6 +66,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
 				},
 			},
 			existing:    true,
@@ -81,6 +85,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
 				},
 			},
 			existing:    true,
@@ -97,6 +104,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
 				},
 			},
 			existing:     false,
@@ -119,6 +129,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
 					Publicport:  "2",
 					Privateport: "20",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
 				},
 			},
 			existing:    true,
@@ -136,6 +149,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
 					Publicport:  "2",
 					Privateport: "20",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
 				},
 			},
 			existing:     false,
@@ -152,6 +168,27 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1",
 					Privateport: "2",
 					Algorithm:   "x",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
+				},
+			},
+			existing:     true,
+			needsUpdate:  true,
+			deleteCalled: false,
+		},
+		{
+			svcPorts: []v1.ServicePort{
+				{Port: 1, NodePort: 2},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Publicport:  "1",
+					Privateport: "2",
+					Tags: []cloudstack.LoadBalancerRuleTags{
+						{Key: serviceTag}, {Key: cloudProviderTag},
+					},
 				},
 			},
 			existing:     true,
@@ -175,7 +212,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			},
 		},
 	}
-	for _, tt := range tests {
+	for i, tt := range tests {
 		deleteCalled = false
 		lb := loadBalancer{
 			name:        "test",
@@ -184,16 +221,18 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			ipAddr:      tt.svcIP,
 			rule:        tt.rule,
 		}
-		existing, needsUpdate, err := lb.checkLoadBalancerRule("name", tt.svcPorts)
-		if tt.errorMatches != "" {
-			assert.Error(t, err)
-			assert.Regexp(t, tt.errorMatches, err.Error())
-			assert.False(t, existing)
-			assert.False(t, needsUpdate)
-		} else {
-			assert.Equal(t, tt.existing, existing)
-			assert.Equal(t, tt.needsUpdate, needsUpdate)
-		}
-		assert.Equal(t, tt.deleteCalled, deleteCalled)
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
+			existing, needsUpdate, err := lb.checkLoadBalancerRule("name", tt.svcPorts)
+			if tt.errorMatches != "" {
+				assert.Error(t, err)
+				assert.Regexp(t, tt.errorMatches, err.Error())
+				assert.False(t, existing)
+				assert.False(t, needsUpdate)
+			} else {
+				assert.Equal(t, tt.existing, existing)
+				assert.Equal(t, tt.needsUpdate, needsUpdate)
+			}
+			assert.Equal(t, tt.deleteCalled, deleteCalled)
+		})
 	}
 }
