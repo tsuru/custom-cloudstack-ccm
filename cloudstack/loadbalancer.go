@@ -161,7 +161,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	if needsUpdate {
 		glog.V(4).Infof("Updating load balancer rule: %v", lb.name)
-		if errLB := lb.updateLoadBalancerRule(lb.name); errLB != nil {
+		if errLB := lb.updateLoadBalancerRule(service); errLB != nil {
 			return nil, errLB
 		}
 		return status, nil
@@ -647,7 +647,12 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 
 	// Check if any of the values we cannot update (those that require a new load balancer rule) are changed.
 	if lb.rule.Publicip == lb.ipAddr && comparePorts(ports, lb.rule) {
-		return true, lb.rule.Algorithm != lb.algorithm, nil
+		missingTags, err := lb.hasMissingTags()
+		if err != nil {
+			return false, false, err
+		}
+		needsUpdate := lb.rule.Algorithm != lb.algorithm || missingTags
+		return true, needsUpdate, nil
 	}
 
 	glog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
@@ -661,7 +666,7 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 }
 
 // updateLoadBalancerRule updates a load balancer rule.
-func (lb *loadBalancer) updateLoadBalancerRule(lbRuleName string) error {
+func (lb *loadBalancer) updateLoadBalancerRule(service *v1.Service) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -671,7 +676,11 @@ func (lb *loadBalancer) updateLoadBalancerRule(lbRuleName string) error {
 	p.SetAlgorithm(lb.algorithm)
 
 	_, err = client.LoadBalancer.UpdateLoadBalancerRule(p)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return lb.assignTagsToRule(lb.rule, service)
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
@@ -787,6 +796,21 @@ func shouldManageLB(lb *loadBalancer, service *v1.Service) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (lb *loadBalancer) hasMissingTags() (bool, error) {
+	wantedTags := []string{cloudProviderTag, serviceTag, namespaceTag}
+	tagMap := map[string]string{}
+	for _, lbTag := range lb.rule.Tags {
+		tagMap[lbTag.Key] = lbTag.Value
+	}
+	for _, t := range wantedTags {
+		_, hasTag := tagMap[t]
+		if !hasTag {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (lb *loadBalancer) hasTag(k, v string) (bool, error) {
