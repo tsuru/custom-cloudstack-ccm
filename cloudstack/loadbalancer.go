@@ -161,8 +161,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 
 	if needsUpdate {
 		glog.V(4).Infof("Updating load balancer rule: %v", lb.name)
-		if errLB := lb.updateLoadBalancerRule(service); errLB != nil {
-			return nil, errLB
+		if err = lb.updateLoadBalancerRule(service); err != nil {
+			return nil, err
 		}
 		return status, nil
 	}
@@ -865,11 +865,22 @@ func (lb *loadBalancer) assignTagsToRule(lbRule *loadBalancerRule, service *v1.S
 	if err != nil {
 		return err
 	}
-	tags := map[string]string{cloudProviderTag: ProviderName, serviceTag: service.Name, namespaceTag: service.Namespace}
-	tp := client.Resourcetags.NewCreateTagsParams([]string{lbRule.Id}, "LoadBalancer", tags)
-	_, err = client.Resourcetags.CreateTags(tp)
-	if err != nil {
-		return fmt.Errorf("error adding tags to load balancer %s: %v", lbRule.Id, err)
+	tags := map[string]string{
+		cloudProviderTag: ProviderName,
+		serviceTag:       service.Name,
+		namespaceTag:     service.Namespace,
+	}
+	for k, v := range tags {
+		// Creating one by one so that we can ignore tags that already exist.
+		tp := client.Resourcetags.NewCreateTagsParams([]string{lbRule.Id}, "LoadBalancer", map[string]string{
+			k: v,
+		})
+		_, err = client.Resourcetags.CreateTags(tp)
+		if err != nil {
+			if !strings.Contains(err.Error(), "already exist") {
+				return fmt.Errorf("error adding tags to load balancer %s: %v", lbRule.Name, err)
+			}
+		}
 	}
 	return nil
 }
@@ -917,7 +928,7 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 	}
 	var result map[string]string
 	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, &result); err != nil {
-		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Id, lb.customAssignNetworksCommand, err)
+		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Name, lb.customAssignNetworksCommand, err)
 	}
 	if jobid, ok := result["jobid"]; ok {
 		glog.V(4).Infof("Querying async job %s for load balancer rule %s", jobid, lbRule.Id)
