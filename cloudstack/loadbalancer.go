@@ -724,7 +724,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 	}
 
 	// Do not create corresponding firewall rule.
-	p.SetParam("openfirewall", false)
+	p.SetParam("openfirewall", true)
 
 	// Create a new load balancer rule.
 	r := cloudstack.CreateLoadBalancerRuleResponse{}
