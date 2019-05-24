@@ -28,7 +28,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
 
@@ -752,7 +752,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 
 // deleteLoadBalancerRule deletes a load balancer rule.
 func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *loadBalancerRule) error {
-	glog.V(4).Infof("Deleting load balancer rule: %v", lbRule.Name)
+	glog.V(4).Infof("Deleting load balancer rule: %v", lbRule.Id)
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -760,7 +760,7 @@ func (lb *loadBalancer) deleteLoadBalancerRule(lbRule *loadBalancerRule) error {
 	p := client.LoadBalancer.NewDeleteLoadBalancerRuleParams(lbRule.Id)
 
 	if _, err := client.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
-		return fmt.Errorf("error deleting load balancer rule %v: %v", lbRule.Name, err)
+		return fmt.Errorf("error deleting load balancer rule %v: %v", lbRule.Id, err)
 	}
 	lb.rule = nil
 	return nil
@@ -898,7 +898,7 @@ func (lb *loadBalancer) assignHostsToRule(lbRule *loadBalancerRule, hostIDs []st
 	p.SetVirtualmachineids(hostIDs)
 
 	if _, err := client.LoadBalancer.AssignToLoadBalancerRule(p); err != nil {
-		return fmt.Errorf("error assigning hosts to load balancer rule %v: %v", lbRule.Name, err)
+		return fmt.Errorf("error assigning hosts to load balancer rule %v: %v", lbRule.Id, err)
 	}
 
 	return nil
