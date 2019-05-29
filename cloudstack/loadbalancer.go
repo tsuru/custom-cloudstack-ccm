@@ -40,6 +40,10 @@ const (
 	namespaceTag     = "kubernetes_namespace"
 )
 
+var (
+	asyncJobWaitTimeout = int64((2 * time.Minute).Seconds())
+)
+
 type loadBalancer struct {
 	*CSCloud
 
@@ -552,7 +556,7 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		pc.SetParam("lbenvironmentid", lb.getLBEnvironmentID())
 	}
 
-	var result map[string]string
+	var result cloudstack.AssociateIpAddressResponse
 	associateCommand := lb.CSCloud.customAssociateIPCommand
 	if associateCommand == "" {
 		associateCommand = "associateIpAddress"
@@ -562,27 +566,24 @@ func (lb *loadBalancer) associatePublicIPAddress() error {
 		return fmt.Errorf("error associate new IP address using endpoint %q: %v", associateCommand, err)
 	}
 
-	lb.ipAddr = result["ipaddress"]
-	lb.ipAddrID = result["id"]
-	if jobid, ok := result["jobid"]; ok {
-		glog.V(4).Infof("Querying async job %s for load balancer %s", jobid, lb.ipAddrID)
-		pa := &cloudstack.QueryAsyncJobResultParams{}
-		pa.SetJobid(jobid)
-		rawAsync, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
-		if err != nil {
-			return err
-		}
-		glog.V(4).Infof("Result: %s", string(rawAsync))
-		var asyncResult struct {
+	lb.ipAddr = result.Ipaddress
+	lb.ipAddrID = result.Id
+	if result.JobID != "" {
+		glog.V(4).Infof("Querying async job %s for load balancer %s", result.JobID, lb.ipAddrID)
+		var alternativeAsyncResult struct {
 			IPAddress struct {
 				IPAddress string `json:"ipaddress,omitempty"`
 			} `json:"ipaddress,omitempty"`
 		}
-		err = json.Unmarshal(rawAsync, &asyncResult)
+		err = waitJob(client, result.JobID, &result, &alternativeAsyncResult)
 		if err != nil {
 			return err
 		}
-		lb.ipAddr = asyncResult.IPAddress.IPAddress
+		if result.Ipaddress != "" {
+			lb.ipAddr = result.Ipaddress
+		} else {
+			lb.ipAddr = alternativeAsyncResult.IPAddress.IPAddress
+		}
 	}
 	glog.V(4).Infof("Allocated IP %s for load balancer %s with name %v", lb.ipAddr, lb.ipAddrID, lb.name)
 
@@ -606,9 +607,13 @@ func (lb *loadBalancer) releaseLoadBalancerIP() error {
 	if disassociateCommand == "" {
 		disassociateCommand = "disassociateIpAddress"
 	}
-	err = client.Custom.CustomRequest(disassociateCommand, pc, new(interface{}))
+	var rsp cloudstack.DisassociateIpAddressResponse
+	err = client.Custom.CustomRequest(disassociateCommand, pc, &rsp)
 	if err != nil {
 		return fmt.Errorf("error disassociate IP address using endpoint %q: %v", disassociateCommand, err)
+	}
+	if rsp.JobID != "" {
+		return waitJob(client, rsp.JobID)
 	}
 	return nil
 }
@@ -732,6 +737,12 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 	if err != nil {
 		return nil, fmt.Errorf("error creating load balancer rule %v: %v", lbRuleName, err)
 	}
+	if r.JobID != "" {
+		err = waitJob(client, r.JobID, &r)
+		if err != nil {
+			return nil, fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRuleName, err)
+		}
+	}
 
 	lbRule := &loadBalancerRule{
 		LoadBalancerRule: &cloudstack.LoadBalancerRule{
@@ -828,6 +839,11 @@ func (lb *loadBalancer) getTag(k string) (string, bool, error) {
 	if lb.rule == nil {
 		return "", false, nil
 	}
+	for _, tag := range lb.rule.Tags {
+		if tag.Key == k {
+			return tag.Value, true, nil
+		}
+	}
 	client, err := lb.getClient()
 	if err != nil {
 		return "", false, err
@@ -873,7 +889,14 @@ func (lb *loadBalancer) assignTagsToRule(lbRule *loadBalancerRule, service *v1.S
 		serviceTag:       service.Name,
 		namespaceTag:     service.Namespace,
 	}
-	for k, v := range tags {
+	var orderedTags []string
+	for k := range tags {
+		orderedTags = append(orderedTags, k)
+	}
+	// Sort tags for deterministic API calls easing debugging
+	sort.Strings(orderedTags)
+	for _, k := range orderedTags {
+		v := tags[k]
 		// Creating one by one so that we can ignore tags that already exist.
 		tp := client.Resourcetags.NewCreateTagsParams([]string{lbRule.Id}, "LoadBalancer", map[string]string{
 			k: v,
@@ -929,17 +952,18 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 	if err != nil {
 		return err
 	}
-	var result map[string]string
+	var result struct {
+		JobID string `json:"jobid"`
+	}
 	if err := client.Custom.CustomRequest(lb.customAssignNetworksCommand, p, &result); err != nil {
 		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Name, lb.customAssignNetworksCommand, err)
 	}
-	if jobid, ok := result["jobid"]; ok {
-		glog.V(4).Infof("Querying async job %s for load balancer rule %s", jobid, lbRule.Id)
-		pa := &cloudstack.QueryAsyncJobResultParams{}
-		pa.SetJobid(jobid)
-		_, err := client.GetAsyncJobResult(jobid, int64(time.Minute))
+	if result.JobID != "" {
+		glog.V(4).Infof("Querying async job %s for load balancer rule %s", result.JobID, lbRule.Id)
+		err = waitJob(client, result.JobID)
 		if err != nil {
 			if !strings.Contains(err.Error(), "is already mapped") {
+				fmt.Printf("err %v - %#v\n", err, err)
 				// we ignore the error if is in the form `Network XXX is already mapped to load balancer`
 				return err
 			}
@@ -1011,4 +1035,22 @@ func symmetricDifference(hostIDs []string, lbInstances []*cloudstack.VirtualMach
 	}
 
 	return assign, remove
+}
+
+func waitJob(client *cloudstack.CloudStackClient, jobID string, results ...interface{}) error {
+	pa := &cloudstack.QueryAsyncJobResultParams{}
+	pa.SetJobid(jobID)
+	data, err := client.GetAsyncJobResult(jobID, asyncJobWaitTimeout)
+	if err != nil {
+		return err
+	}
+	if len(results) > 0 {
+		for _, result := range results {
+			err = json.Unmarshal(data, result)
+			if err == nil {
+				break
+			}
+		}
+	}
+	return err
 }

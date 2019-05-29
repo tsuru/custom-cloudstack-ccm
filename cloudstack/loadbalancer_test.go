@@ -127,9 +127,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		// Second EnsureLoadBalancer call
 		{Command: "listVirtualMachines"},
 		{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
-		{Command: "listTags"},
-		{Command: "listTags"},
-		{Command: "listTags"},
 	})
 }
 
