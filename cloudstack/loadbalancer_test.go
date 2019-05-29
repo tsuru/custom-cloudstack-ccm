@@ -130,6 +130,91 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 	})
 }
 
+func Test_CSCloud_EnsureLoadBalancer_UpdatePorts(t *testing.T) {
+	srv := cloudstackFake.NewCloudstackServer()
+	defer srv.Close()
+
+	csCloud := &CSCloud{
+		environmentLabel:            "environment-label",
+		projectIDLabel:              "project-label",
+		kubeClient:                  fake.NewSimpleClientset(),
+		customAssignNetworksCommand: "assignNetworkToLBRule",
+		environments: map[string]CSEnvironment{
+			"env1": {
+				lbEnvironmentID: "1",
+				lbDomain:        "test.com",
+				client:          cloudstack.NewAsyncClient(srv.URL, "a", "b", true),
+			},
+		},
+	}
+	nodes := []*corev1.Node{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "n1",
+				Labels: map[string]string{
+					"project-label":     "11111111-2222-3333-4444-555555555555",
+					"environment-label": "env1",
+				},
+			},
+		},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc1",
+			Namespace: "myns",
+			Labels: map[string]string{
+				"environment-label": "env1",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+			},
+			Type: corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{
+				"app": "myapp",
+			},
+		},
+	}
+
+	lbStatus, err := csCloud.EnsureLoadBalancer("kubernetes", svc, nodes)
+	require.NoError(t, err)
+	assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+		Ingress: []corev1.LoadBalancerIngress{
+			{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+		},
+	})
+
+	srv.Calls = nil
+	svc.Spec.Ports[0].NodePort = 30002
+	lbStatus, err = csCloud.EnsureLoadBalancer("kubernetes", svc, nodes)
+	require.NoError(t, err)
+	assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+		Ingress: []corev1.LoadBalancerIngress{
+			{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+		},
+	})
+
+	srv.HasCalls(t, []cloudstackFake.MockAPICall{
+		{Command: "listVirtualMachines"},
+		{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+		{Command: "deleteLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}}},
+		{Command: "queryAsyncJobResult"},
+		{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}}},
+		{Command: "queryAsyncJobResult"},
+		{Command: "createTags", Params: url.Values{"tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+		{Command: "queryAsyncJobResult"},
+		{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+		{Command: "queryAsyncJobResult"},
+		{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+		{Command: "queryAsyncJobResult"},
+		{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-2"}, "networkids": []string{"net1"}}},
+		{Command: "queryAsyncJobResult"},
+		{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-2"}, "virtualmachineids": []string{"vm1"}}},
+		{Command: "queryAsyncJobResult"},
+	})
+}
+
 func TestFilterNodesMatchingLabels(t *testing.T) {
 	nodes := []*v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool1"}}},

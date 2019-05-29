@@ -27,7 +27,7 @@ type CloudstackServer struct {
 	Calls   []MockAPICall
 	Hook    func(w http.ResponseWriter, r *http.Request) bool
 	idx     map[string]int
-	jobs    map[string]interface{}
+	jobs    map[string]func() interface{}
 	tags    map[string][]cloudstack.Tag
 	lbRules map[string]loadBalancerRule
 	ips     map[string]cloudstack.AssociateIpAddressResponse
@@ -37,7 +37,7 @@ func NewCloudstackServer() *CloudstackServer {
 	cloudstackSrv := &CloudstackServer{
 		idx:     make(map[string]int),
 		lbRules: make(map[string]loadBalancerRule),
-		jobs:    make(map[string]interface{}),
+		jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tag),
 		ips:     make(map[string]cloudstack.AssociateIpAddressResponse),
 	}
@@ -92,20 +92,23 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-ip-%d", ipIdx),
 		}
 		w.Write(marshalResponse("associateIpAddressResponse", obj))
-		obj.Ipaddress = fmt.Sprintf("10.0.0.%d", ipIdx)
-		s.ips[ipID] = obj
-		s.jobs[obj.JobID] = obj
+		s.jobs[obj.JobID] = func() interface{} {
+			obj.Ipaddress = fmt.Sprintf("10.0.0.%d", ipIdx)
+			s.ips[ipID] = obj
+			return obj
+		}
 
 	case "createLoadBalancerRule":
 		lbname := r.FormValue("name")
 		if _, ok := s.lbRules[lbname]; ok {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusConflict)
+			w.Write(errorResponse("createLoadBalancerRule", fmt.Sprintf("lb already exists with name %v", lbname)))
 			return
 		}
-		ruleID := s.newID(cmd)
-		jobID := fmt.Sprintf("job-lbrule-%d", ruleID)
+		ruleIdx := s.newID(cmd)
+		jobID := fmt.Sprintf("job-lbrule-%d", ruleIdx)
 		obj := loadBalancerRule{
-			"id":    fmt.Sprintf("lbrule-%d", ruleID),
+			"id":    fmt.Sprintf("lbrule-%d", ruleIdx),
 			"jobid": jobID,
 		}
 		ipObj := s.ips[r.FormValue("publicipid")]
@@ -126,37 +129,45 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if additionalPorts := r.FormValue("additionalportmap"); additionalPorts != "" {
 			obj["additionalportmap"] = strings.Split(r.FormValue("additionalportmap"), ",")
 		}
-		s.jobs[jobID] = obj
-		s.lbRules[lbname] = obj
+		s.jobs[jobID] = func() interface{} {
+			s.lbRules[lbname] = obj
+			return obj
+		}
 
 	case "assignNetworkToLBRule":
-		netAssignID := s.newID(cmd)
-		fullID := fmt.Sprintf("job-net-assign-%d", netAssignID)
+		netAssignIdx := s.newID(cmd)
+		fullID := fmt.Sprintf("job-net-assign-%d", netAssignIdx)
 		obj := map[string]interface{}{
 			"jobid": fullID,
 		}
 		w.Write(marshalResponse("assignNetworkToLBRuleResponse", obj))
-		s.jobs[fullID] = obj
+		s.jobs[fullID] = func() interface{} {
+			return obj
+		}
 
 	case "createTags":
-		tagsID := s.newID(cmd)
+		tagsIdx := s.newID(cmd)
 		obj := cloudstack.CreateTagsResponse{
-			JobID: fmt.Sprintf("job-tags-%d", tagsID),
+			JobID: fmt.Sprintf("job-tags-%d", tagsIdx),
 		}
 		w.Write(marshalResponse("createTags", obj))
-		s.tags[r.FormValue("resourceids")] = append(s.tags[r.FormValue("resourceids")], cloudstack.Tag{
-			Key:   r.FormValue("tags[0].key"),
-			Value: r.FormValue("tags[0].value"),
-		})
-		s.jobs[obj.JobID] = obj
+		s.jobs[obj.JobID] = func() interface{} {
+			s.tags[r.FormValue("resourceids")] = append(s.tags[r.FormValue("resourceids")], cloudstack.Tag{
+				Key:   r.FormValue("tags[0].key"),
+				Value: r.FormValue("tags[0].value"),
+			})
+			return obj
+		}
 
 	case "assignToLoadBalancerRule":
-		hostAssignID := s.newID(cmd)
+		hostAssignIdx := s.newID(cmd)
 		obj := cloudstack.AssignToLoadBalancerRuleResponse{
-			JobID: fmt.Sprintf("job-host-assign-%d", hostAssignID),
+			JobID: fmt.Sprintf("job-host-assign-%d", hostAssignIdx),
 		}
 		w.Write(marshalResponse("assignToLoadBalancerRuleResponse", obj))
-		s.jobs[obj.JobID] = obj
+		s.jobs[obj.JobID] = func() interface{} {
+			return obj
+		}
 
 	case "listTags":
 		keyFilter := r.FormValue("key")
@@ -173,17 +184,35 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Tags:  ptrTags,
 		}))
 
+	case "deleteLoadBalancerRule":
+		lbID := r.FormValue("id")
+		deleteIdx := s.newID(cmd)
+		obj := cloudstack.DeleteLoadBalancerRuleResponse{
+			JobID: fmt.Sprintf("job-delete-lb-%d", deleteIdx),
+		}
+		w.Write(marshalResponse("deleteLoadBalancerRuleResponse", obj))
+		s.jobs[obj.JobID] = func() interface{} {
+			for k, lb := range s.lbRules {
+				if lb["id"] == lbID {
+					delete(s.lbRules, k)
+					break
+				}
+			}
+			delete(s.tags, lbID)
+			return obj
+		}
+
 	case "queryAsyncJobResult":
 		jobID := r.FormValue("jobid")
-		obj := s.jobs[jobID]
-		if obj == nil {
+		callback := s.jobs[jobID]
+		if callback == nil {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write(errorResponse("queryAsyncJobResultResponse", fmt.Sprintf("job id %q not found: %#v", jobID, r.URL.Query())))
 			break
 		}
 		w.Write(marshalResponse("queryAsyncJobResultResponse", map[string]interface{}{
 			"jobstatus": 1,
-			"jobresult": obj,
+			"jobresult": callback(),
 		}))
 
 	default:
