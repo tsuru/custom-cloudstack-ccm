@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/xanzy/go-cloudstack/cloudstack"
 )
 
@@ -32,6 +31,7 @@ type CloudstackServer struct {
 	tags    map[string][]cloudstack.Tag
 	lbRules map[string]loadBalancerRule
 	ips     map[string]cloudstack.PublicIpAddress
+	vms     map[string][]*cloudstack.VirtualMachine
 }
 
 func NewCloudstackServer() *CloudstackServer {
@@ -41,6 +41,7 @@ func NewCloudstackServer() *CloudstackServer {
 		jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tag),
 		ips:     make(map[string]cloudstack.PublicIpAddress),
+		vms:     make(map[string][]*cloudstack.VirtualMachine),
 	}
 	cloudstackSrv.Server = httptest.NewServer(cloudstackSrv)
 	return cloudstackSrv
@@ -196,12 +197,23 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "assignToLoadBalancerRule":
+		ruleId := r.FormValue("id")
+		vms := r.FormValue("virtualmachineids")
+		var vmIDs []string
+		if vms != "" {
+			vmIDs = strings.Split(vms, ",")
+		}
 		hostAssignIdx := s.newID(cmd)
 		obj := cloudstack.AssignToLoadBalancerRuleResponse{
 			JobID: fmt.Sprintf("job-host-assign-%d", hostAssignIdx),
 		}
 		w.Write(MarshalResponse("assignToLoadBalancerRuleResponse", obj))
 		s.jobs[obj.JobID] = func() interface{} {
+			for _, vmID := range vmIDs {
+				s.vms[ruleId] = append(s.vms[ruleId], &cloudstack.VirtualMachine{
+					Id: vmID,
+				})
+			}
 			return obj
 		}
 
@@ -238,6 +250,20 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return obj
 		}
 
+	case "listLoadBalancerRuleInstances":
+		page, _ := strconv.Atoi(r.FormValue("page"))
+		if page > 0 {
+			w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
+				Count: 0,
+			}))
+			return
+		}
+		vms := s.vms[r.FormValue("id")]
+		w.Write(MarshalResponse("listLoadBalancerRuleInstancesResponse", cloudstack.ListLoadBalancerRuleInstancesResponse{
+			Count:                     len(vms),
+			LoadBalancerRuleInstances: vms,
+		}))
+
 	case "queryAsyncJobResult":
 		jobID := r.FormValue("jobid")
 		callback := s.jobs[jobID]
@@ -273,7 +299,21 @@ func MarshalResponse(name string, obj interface{}) []byte {
 }
 
 func (s *CloudstackServer) HasCalls(t *testing.T, calls []MockAPICall) {
-	require.Len(t, s.Calls, len(calls))
+	callsError := []string{
+		"expected calls:",
+	}
+	for _, call := range calls {
+		callsError = append(callsError, "  "+call.Command)
+	}
+	callsError = append(callsError, "actual calls:")
+	for _, call := range s.Calls {
+		callsError = append(callsError, "  "+call.Command)
+	}
+
+	if !assert.Len(t, s.Calls, len(calls), strings.Join(callsError, "\n")) {
+		return
+	}
+
 	for i, expectedCall := range calls {
 		actualCall := s.Calls[i]
 		assert.Equal(t, actualCall.Command, expectedCall.Command)

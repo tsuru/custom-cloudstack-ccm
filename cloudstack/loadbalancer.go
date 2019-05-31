@@ -168,45 +168,33 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	if err != nil {
 		return nil, err
 	}
-	if exists && !needsUpdate {
-		glog.V(4).Infof("Load balancer rule %v is up-to-date", lb.name)
-		return status, nil
-	}
 
 	if needsUpdate {
 		glog.V(4).Infof("Updating load balancer rule: %v", lb.name)
 		if err = lb.updateLoadBalancerRule(service); err != nil {
 			return nil, err
 		}
+	}
+
+	if exists {
+		if err = lb.syncNodes(hostIDs, networkIDs); err != nil {
+			return nil, err
+		}
 		return status, nil
 	}
 
 	glog.V(4).Infof("Creating load balancer rule: %v", lb.name)
-	lbRule, err := lb.createLoadBalancerRule(lb.name, service.Spec.Ports)
+	lb.rule, err = lb.createLoadBalancerRule(lb.name, service.Spec.Ports)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func(rule *loadBalancerRule) {
-		if err != nil {
-			if deleteErr := lb.deleteLoadBalancerRule(rule); deleteErr != nil {
-				glog.Errorf(deleteErr.Error())
-			}
-		}
-	}(lbRule)
-
 	glog.V(4).Infof("Assigning tag to load balancer rule: %v", lb.name)
-	if err = lb.cloud.assignTagsToRule(lbRule, service); err != nil {
+	if err = lb.cloud.assignTagsToRule(lb.rule, service); err != nil {
 		return nil, err
 	}
 
-	glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", networkIDs, lb.name)
-	if err = lb.assignNetworksToRule(lbRule, networkIDs); err != nil {
-		return nil, err
-	}
-
-	glog.V(4).Infof("Assigning hosts (%v) to load balancer rule: %v", hostIDs, lb.name)
-	if err = lb.assignHostsToRule(lbRule, hostIDs); err != nil {
+	if err = lb.syncNodes(hostIDs, networkIDs); err != nil {
 		return nil, err
 	}
 
@@ -243,42 +231,7 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 		return nil
 	}
 
-	client, err := lb.getClient()
-	if err != nil {
-		return err
-	}
-
-	p := client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lb.rule.Id)
-
-	// Retrieve all VMs currently associated to this load balancer rule.
-	l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(p)
-	if err != nil {
-		return fmt.Errorf("error retrieving associated instances: %v", err)
-	}
-
-	assign, remove := symmetricDifference(hostIDs, l.LoadBalancerRuleInstances)
-
-	if len(assign) > 0 {
-
-		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", networkIDs, lb.rule.Name)
-		if err := lb.assignNetworksToRule(lb.rule, networkIDs); err != nil {
-			return err
-		}
-
-		glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lb.rule.Name)
-		if err := lb.assignHostsToRule(lb.rule, assign); err != nil {
-			return err
-		}
-	}
-
-	if len(remove) > 0 {
-		glog.V(4).Infof("Removing old hosts (%v) from load balancer rule: %v", assign, lb.rule.Name)
-		if err := lb.removeHostsFromRule(lb.rule, remove); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return lb.syncNodes(hostIDs, networkIDs)
 }
 
 // EnsureLoadBalancerDeleted deletes the specified load balancer if it exists, returning
@@ -558,25 +511,6 @@ func matchAllTags(publicIP *cloudstack.PublicIpAddress, tags map[string]string) 
 		}
 	}
 	return false
-}
-
-func listAllIPPages(client *cloudstack.CloudStackClient, params *cloudstack.ListPublicIpAddressesParams) ([]*cloudstack.PublicIpAddress, error) {
-	page := 0
-	params.SetPagesize(20)
-	var result []*cloudstack.PublicIpAddress
-	for {
-		params.SetPage(page)
-		l, err := client.Address.ListPublicIpAddresses(params)
-		if err != nil {
-			return nil, err
-		}
-		if l.Count == 0 {
-			break
-		}
-		result = append(result, l.PublicIpAddresses...)
-		page++
-	}
-	return result, nil
 }
 
 // tryPublicIPAddressByTags tries retrieving an ip address matching service
@@ -1208,4 +1142,77 @@ func waitJob(client *cloudstack.CloudStackClient, jobID string, results ...inter
 		}
 	}
 	return err
+}
+
+func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+
+	p := client.LoadBalancer.NewListLoadBalancerRuleInstancesParams(lb.rule.Id)
+	vms, err := listAllLBInstancesPages(client, p)
+	if err != nil {
+		return fmt.Errorf("error retrieving associated instances: %v", err)
+	}
+
+	assign, remove := symmetricDifference(hostIDs, vms)
+
+	if len(assign) > 0 {
+		glog.V(4).Infof("Assigning networks (%v) to load balancer rule: %v", networkIDs, lb.rule.Name)
+		if err := lb.assignNetworksToRule(lb.rule, networkIDs); err != nil {
+			return err
+		}
+
+		glog.V(4).Infof("Assigning new hosts (%v) to load balancer rule: %v", assign, lb.rule.Name)
+		if err := lb.assignHostsToRule(lb.rule, assign); err != nil {
+			return err
+		}
+	}
+
+	if len(remove) > 0 {
+		glog.V(4).Infof("Removing old hosts (%v) from load balancer rule: %v", assign, lb.rule.Name)
+		if err := lb.removeHostsFromRule(lb.rule, remove); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listAllLBInstancesPages(client *cloudstack.CloudStackClient, params *cloudstack.ListLoadBalancerRuleInstancesParams) ([]*cloudstack.VirtualMachine, error) {
+	page := 0
+	params.SetPagesize(20)
+	var result []*cloudstack.VirtualMachine
+	for {
+		params.SetPage(page)
+		l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(params)
+		if err != nil {
+			return nil, err
+		}
+		if l.Count == 0 {
+			break
+		}
+		result = append(result, l.LoadBalancerRuleInstances...)
+		page++
+	}
+	return result, nil
+}
+
+func listAllIPPages(client *cloudstack.CloudStackClient, params *cloudstack.ListPublicIpAddressesParams) ([]*cloudstack.PublicIpAddress, error) {
+	page := 0
+	params.SetPagesize(20)
+	var result []*cloudstack.PublicIpAddress
+	for {
+		params.SetPage(page)
+		l, err := client.Address.ListPublicIpAddresses(params)
+		if err != nil {
+			return nil, err
+		}
+		if l.Count == 0 {
+			break
+		}
+		result = append(result, l.PublicIpAddresses...)
+		page++
+	}
+	return result, nil
 }
