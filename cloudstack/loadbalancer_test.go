@@ -102,6 +102,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			{Command: "queryAsyncJobResult"},
 			{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 			{Command: "queryAsyncJobResult"},
+			{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
 			{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
 			{Command: "queryAsyncJobResult"},
 			{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
@@ -125,6 +126,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{svc: baseSvc, assert: baseAssert},
 			},
 		},
+
 		{
 			name: "second ensure does nothing",
 			calls: []consecutiveCall{
@@ -144,11 +146,14 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
 					},
 				},
 			},
 		},
+
 		{
 			name: "second ensure updating ports",
 			calls: []consecutiveCall{
@@ -182,6 +187,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-2"}}},
 							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-2"}, "networkids": []string{"net1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-2"}, "virtualmachineids": []string{"vm1"}}},
@@ -247,6 +253,74 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+			},
+		},
+
+		{
+			name: "assign to load balancer error",
+			hook: func(t *testing.T, srv *cloudstackFake.CloudstackServer) {
+				calls := 0
+				srv.Hook = func(w http.ResponseWriter, r *http.Request) bool {
+					cmd := r.FormValue("command")
+					if cmd == "assignToLoadBalancerRule" && calls == 0 {
+						calls++
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write(cloudstackFake.ErrorResponse(cmd+"Response", "my error"))
+						return true
+					}
+					return false
+				}
+			},
+			calls: []consecutiveCall{
+				{
+					svc: baseSvc,
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.Error(t, err)
+						require.Contains(t, err.Error(), "my error")
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listPublicIpAddresses"},
+							{Command: "listNetworks"},
+							{Command: "associateIpAddress"},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+						})
+					},
+				},
+				{
+					svc: baseSvc,
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
 							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
