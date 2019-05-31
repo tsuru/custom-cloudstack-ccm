@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ type CloudstackServer struct {
 	jobs    map[string]func() interface{}
 	tags    map[string][]cloudstack.Tag
 	lbRules map[string]loadBalancerRule
-	ips     map[string]cloudstack.AssociateIpAddressResponse
+	ips     map[string]cloudstack.PublicIpAddress
 }
 
 func NewCloudstackServer() *CloudstackServer {
@@ -39,7 +40,7 @@ func NewCloudstackServer() *CloudstackServer {
 		lbRules: make(map[string]loadBalancerRule),
 		jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tag),
-		ips:     make(map[string]cloudstack.AssociateIpAddressResponse),
+		ips:     make(map[string]cloudstack.PublicIpAddress),
 	}
 	cloudstackSrv.Server = httptest.NewServer(cloudstackSrv)
 	return cloudstackSrv
@@ -76,13 +77,45 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				lbs = append(lbs, lb)
 			}
 		}
-		w.Write(marshalResponse("listLoadBalancerRulesResponse", map[string]interface{}{
+		w.Write(MarshalResponse("listLoadBalancerRulesResponse", map[string]interface{}{
 			"count":            len(lbs),
 			"loadbalancerrule": lbs,
 		}))
 
 	case "listNetworks":
 		w.Write([]byte(`{"listNetworksResponse": {"count": 1, "network": [{"id": "net1"}]}}`))
+
+	case "listPublicIpAddresses":
+		r.ParseForm()
+		address := r.FormValue("ipaddress")
+		page, _ := strconv.Atoi(r.FormValue("page"))
+		if page > 0 {
+			w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
+				Count: 0,
+			}))
+			return
+		}
+		tags := parseTags(r.Form)
+		var ips []*cloudstack.PublicIpAddress
+		for _, ip := range s.ips {
+			if address != "" && ip.Ipaddress != address {
+				continue
+			}
+			includeIP := len(tags) == 0
+			for _, tag := range s.tags[ip.Id] {
+				if tags[tag.Key] == tag.Value {
+					includeIP = true
+				}
+				ip.Tags = append(ip.Tags, cloudstack.PublicIpAddressTags(tag))
+			}
+			if includeIP {
+				ips = append(ips, &ip)
+			}
+		}
+		w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
+			Count:             len(ips),
+			PublicIpAddresses: ips,
+		}))
 
 	case "associateIpAddress":
 		ipIdx := s.newID(cmd)
@@ -91,10 +124,13 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Id:    ipID,
 			JobID: fmt.Sprintf("job-ip-%d", ipIdx),
 		}
-		w.Write(marshalResponse("associateIpAddressResponse", obj))
+		w.Write(MarshalResponse("associateIpAddressResponse", obj))
 		s.jobs[obj.JobID] = func() interface{} {
 			obj.Ipaddress = fmt.Sprintf("10.0.0.%d", ipIdx)
-			s.ips[ipID] = obj
+			s.ips[ipID] = cloudstack.PublicIpAddress{
+				Id:        obj.Id,
+				Ipaddress: obj.Ipaddress,
+			}
 			return obj
 		}
 
@@ -102,7 +138,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		lbname := r.FormValue("name")
 		if _, ok := s.lbRules[lbname]; ok {
 			w.WriteHeader(http.StatusConflict)
-			w.Write(errorResponse("createLoadBalancerRule", fmt.Sprintf("lb already exists with name %v", lbname)))
+			w.Write(ErrorResponse("createLoadBalancerRule", fmt.Sprintf("lb already exists with name %v", lbname)))
 			return
 		}
 		ruleIdx := s.newID(cmd)
@@ -113,10 +149,10 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		ipObj := s.ips[r.FormValue("publicipid")]
 		if ipObj.Id == "" {
-			w.Write(errorResponse(cmd+"Response", fmt.Sprintf("ip id not found", r.FormValue("publicipid"))))
+			w.Write(ErrorResponse(cmd+"Response", fmt.Sprintf("ip id not found: %s", r.FormValue("publicipid"))))
 			return
 		}
-		w.Write(marshalResponse("createLoadBalancerRuleResponse", obj))
+		w.Write(MarshalResponse("createLoadBalancerRuleResponse", obj))
 		obj["algorithm"] = r.FormValue("algorithm")
 		obj["name"] = r.FormValue("name")
 		obj["privateport"] = r.FormValue("privateport")
@@ -140,7 +176,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		obj := map[string]interface{}{
 			"jobid": fullID,
 		}
-		w.Write(marshalResponse("assignNetworkToLBRuleResponse", obj))
+		w.Write(MarshalResponse("assignNetworkToLBRuleResponse", obj))
 		s.jobs[fullID] = func() interface{} {
 			return obj
 		}
@@ -150,7 +186,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		obj := cloudstack.CreateTagsResponse{
 			JobID: fmt.Sprintf("job-tags-%d", tagsIdx),
 		}
-		w.Write(marshalResponse("createTags", obj))
+		w.Write(MarshalResponse("createTags", obj))
 		s.jobs[obj.JobID] = func() interface{} {
 			s.tags[r.FormValue("resourceids")] = append(s.tags[r.FormValue("resourceids")], cloudstack.Tag{
 				Key:   r.FormValue("tags[0].key"),
@@ -164,7 +200,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		obj := cloudstack.AssignToLoadBalancerRuleResponse{
 			JobID: fmt.Sprintf("job-host-assign-%d", hostAssignIdx),
 		}
-		w.Write(marshalResponse("assignToLoadBalancerRuleResponse", obj))
+		w.Write(MarshalResponse("assignToLoadBalancerRuleResponse", obj))
 		s.jobs[obj.JobID] = func() interface{} {
 			return obj
 		}
@@ -179,7 +215,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			ptrTags = append(ptrTags, &tags[i])
 		}
-		w.Write(marshalResponse("listTagsResponse", cloudstack.ListTagsResponse{
+		w.Write(MarshalResponse("listTagsResponse", cloudstack.ListTagsResponse{
 			Count: len(tags),
 			Tags:  ptrTags,
 		}))
@@ -190,7 +226,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		obj := cloudstack.DeleteLoadBalancerRuleResponse{
 			JobID: fmt.Sprintf("job-delete-lb-%d", deleteIdx),
 		}
-		w.Write(marshalResponse("deleteLoadBalancerRuleResponse", obj))
+		w.Write(MarshalResponse("deleteLoadBalancerRuleResponse", obj))
 		s.jobs[obj.JobID] = func() interface{} {
 			for k, lb := range s.lbRules {
 				if lb["id"] == lbID {
@@ -207,29 +243,29 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		callback := s.jobs[jobID]
 		if callback == nil {
 			w.WriteHeader(http.StatusNotFound)
-			w.Write(errorResponse("queryAsyncJobResultResponse", fmt.Sprintf("job id %q not found: %#v", jobID, r.URL.Query())))
+			w.Write(ErrorResponse("queryAsyncJobResultResponse", fmt.Sprintf("job id %q not found: %#v", jobID, r.URL.Query())))
 			break
 		}
-		w.Write(marshalResponse("queryAsyncJobResultResponse", map[string]interface{}{
+		w.Write(MarshalResponse("queryAsyncJobResultResponse", map[string]interface{}{
 			"jobstatus": 1,
 			"jobresult": callback(),
 		}))
 
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(errorResponse(cmd+"Response", fmt.Sprintf("fake call for %q not implemented, args: %#v", cmd, r.URL.Query())))
+		w.Write(ErrorResponse(cmd+"Response", fmt.Sprintf("fake call for %q not implemented, args: %#v", cmd, r.URL.Query())))
 	}
 }
 
-func errorResponse(cmd, msg string) []byte {
-	return marshalResponse(cmd, cloudstack.CSError{
+func ErrorResponse(cmd, msg string) []byte {
+	return MarshalResponse(cmd, cloudstack.CSError{
 		ErrorCode:   999,
 		CSErrorCode: 999,
 		ErrorText:   msg,
 	})
 }
 
-func marshalResponse(name string, obj interface{}) []byte {
+func MarshalResponse(name string, obj interface{}) []byte {
 	data, _ := json.Marshal(map[string]interface{}{
 		name: obj,
 	})
@@ -242,7 +278,33 @@ func (s *CloudstackServer) HasCalls(t *testing.T, calls []MockAPICall) {
 		actualCall := s.Calls[i]
 		assert.Equal(t, actualCall.Command, expectedCall.Command)
 		for k, v := range expectedCall.Params {
-			assert.Equal(t, actualCall.Params[k], v, "existing params: %#v", actualCall.Params)
+			if v == nil {
+				assert.Contains(t, actualCall.Params, k, "existing params: %#v", actualCall.Params)
+			} else {
+				assert.Equal(t, actualCall.Params[k], v, "existing params: %#v", actualCall.Params)
+			}
 		}
 	}
+}
+
+func parseTags(form url.Values) map[string]string {
+	tagRegexp := regexp.MustCompile(`tags\[(\d+)\]\.(key|value)`)
+	keys := map[string]string{}
+	values := map[string]string{}
+	for k, _ := range form {
+		matches := tagRegexp.FindStringSubmatch(k)
+		if len(matches) != 3 {
+			continue
+		}
+		if matches[2] == "key" {
+			keys[matches[1]] = form.Get(k)
+		} else if matches[2] == "value" {
+			values[matches[1]] = form.Get(k)
+		}
+	}
+	result := map[string]string{}
+	for id, k := range keys {
+		result[k] = values[id]
+	}
+	return result
 }
