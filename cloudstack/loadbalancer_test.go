@@ -24,24 +24,6 @@ func init() {
 	flag.Set("logtostderr", "true")
 }
 
-// flow:
-// create IP
-// create LBRule
-// create Tags
-// associate Net
-// associate Host
-
-// Test cases:
-// No LB, new Service, create IP success, create LB success
-// No LB, new Service, create IP error - success, create LB success
-// No LB, new Service, create IP success, create LB error-success
-// No LB, new Service, create IP success, create LB success, assing host error-success
-
-// Existing LB, new Service, reuse IP, reuse LB (missing tags)
-// Existing LB, new Service, reuse IP, reuse LB (wrong tags?)
-// Existing LB, new Service, reuse IP, reuse LB (new algorithm)
-// Existing LB, new Service, reuse IP, recreate LB (new ports)
-
 func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 	baseNodes := []*corev1.Node{
 		{
@@ -440,6 +422,133 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
 							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+			},
+		},
+
+		{
+			name: "service requesting explicit IP, ip not found",
+			calls: []consecutiveCall{
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Spec.LoadBalancerIP = "192.168.9.9"
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.Error(t, err)
+						assert.Contains(t, err.Error(), "could not find IP address 192.168.9.9")
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"0"}, "tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"ipaddress": []string{"192.168.9.9"}}},
+						})
+					},
+				},
+			},
+		},
+
+		{
+			name: "service requesting explicit IP, ip found",
+			hook: func(t *testing.T, srv *cloudstackFake.CloudstackServer) {
+				srv.AddIP(cloudstack.PublicIpAddress{
+					Id:        "mycustomip",
+					Ipaddress: "192.168.9.9",
+				})
+			},
+			calls: []consecutiveCall{
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Spec.LoadBalancerIP = "192.168.9.9"
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "192.168.9.9", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"0"}, "tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"ipaddress": []string{"192.168.9.9"}}},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"mycustomip"}, "privateport": []string{"30001"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+			},
+		},
+
+		{
+			name: "existing load balancer missing namespace tag",
+			hook: func(t *testing.T, srv *cloudstackFake.CloudstackServer) {
+				calls := 0
+				srv.Hook = func(w http.ResponseWriter, r *http.Request) bool {
+					matching := r.FormValue("command") == "createTags" &&
+						r.FormValue("resourceids") == "lbrule-1" &&
+						r.FormValue("tags[0].key") == "kubernetes_namespace" &&
+						calls == 0
+					if matching {
+						calls++
+						obj := cloudstack.CreateTagsResponse{
+							JobID:   "myjobid",
+							Success: true,
+						}
+						w.Write(cloudstackFake.MarshalResponse("createTagsResponse", obj))
+						srv.Jobs["myjobid"] = func() interface{} {
+							return obj
+						}
+						return true
+					}
+					return false
+				}
+			},
+			calls: []consecutiveCall{
+				{
+					svc:    baseSvc,
+					assert: baseAssert,
+				},
+				{
+					svc: baseSvc,
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listTags", Params: url.Values{"key": []string{"kubernetes_namespace"}}},
+							{Command: "updateLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
 					},
 				},
