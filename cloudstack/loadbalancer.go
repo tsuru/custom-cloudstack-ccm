@@ -280,7 +280,7 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 
 	if lb.ip.id != "" && lb.ip.address != service.Spec.LoadBalancerIP {
 		glog.V(4).Infof("Releasing load balancer IP: %v", lb.ip)
-		if err := lb.cloud.releaseLoadBalancerIP(lb.ip); err != nil {
+		if err := lb.cloud.releaseIPIfManaged(lb.ip, service); err != nil {
 			return err
 		}
 	}
@@ -487,19 +487,23 @@ func (lb *loadBalancer) updateLoadBalancerIP(service *v1.Service) error {
 		return nil
 	}
 
-	oldPublicIP, err := lb.cloud.getPublicIPAddressByID(lb.ip.id)
+	err = lb.cloud.releaseIPIfManaged(lb.ip, service)
 	if err != nil {
 		return err
 	}
-	if shouldManageIP(*oldPublicIP, service) {
-		err = lb.cloud.releaseLoadBalancerIP(lb.ip)
-		if err != nil {
-			return err
-		}
-	}
 	lb.ip = *publicIP
 	return nil
+}
 
+func (pc *projectCloud) releaseIPIfManaged(ip cloudstackIP, service *v1.Service) error {
+	publicIP, err := pc.getPublicIPAddressByID(ip.id)
+	if err != nil {
+		return err
+	}
+	if shouldManageIP(*publicIP, service) {
+		return pc.releaseLoadBalancerIP(ip)
+	}
+	return nil
 }
 
 // getLoadBalancerIP retrieves an existing IP for the loadbalancer or allocates
