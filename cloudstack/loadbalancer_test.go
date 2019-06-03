@@ -704,7 +704,6 @@ func TestFilterNodesMatchingLabels(t *testing.T) {
 
 func TestCheckLoadBalancerRule(t *testing.T) {
 	tests := []struct {
-		svcIP        string
 		svcPorts     []corev1.ServicePort
 		rule         *loadBalancerRule
 		existing     bool
@@ -717,7 +716,6 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			needsUpdate: false,
 		},
 		{
-			svcIP: "10.0.0.1",
 			svcPorts: []corev1.ServicePort{
 				{Port: 1234, NodePort: 4567},
 			},
@@ -735,7 +733,6 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			needsUpdate: false,
 		},
 		{
-			svcIP: "10.0.0.1",
 			svcPorts: []corev1.ServicePort{
 				{Port: 1234, NodePort: 4567},
 			},
@@ -752,26 +749,6 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			},
 			existing:    true,
 			needsUpdate: false,
-		},
-		{
-			svcIP: "10.0.0.2",
-			svcPorts: []corev1.ServicePort{
-				{Port: 1234, NodePort: 4567},
-			},
-			rule: &loadBalancerRule{
-				AdditionalPortMap: []string{},
-				LoadBalancerRule: &cloudstack.LoadBalancerRule{
-					Publicport:  "1234",
-					Privateport: "4567",
-					Publicip:    "10.0.0.1",
-					Tags: []cloudstack.LoadBalancerRuleTags{
-						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
-					},
-				},
-			},
-			existing:     false,
-			needsUpdate:  false,
-			deleteCalled: true,
 		},
 		{
 			svcPorts: []corev1.ServicePort{
@@ -879,9 +856,6 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			cloud: &projectCloud{
 				environment: "test",
 				CSCloud:     cloud,
-			},
-			ip: cloudstackIP{
-				address: tt.svcIP,
 			},
 			rule: tt.rule,
 		}

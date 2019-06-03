@@ -786,7 +786,7 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 	}
 
 	// Check if any of the values we cannot update (those that require a new load balancer rule) are changed.
-	if lb.rule.Publicip == lb.ip.address && comparePorts(ports, lb.rule) {
+	if comparePorts(ports, lb.rule) {
 		missingTags, err := lb.hasMissingTags()
 		if err != nil {
 			return false, false, err
