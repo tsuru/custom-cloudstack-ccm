@@ -56,6 +56,15 @@ func (s *CloudstackServer) lastID(cmd string) int {
 	return s.idx[cmd]
 }
 
+func (s *CloudstackServer) lbNameByID(lbID string) string {
+	for k, lb := range s.lbRules {
+		if lb["id"] == lbID {
+			return k
+		}
+	}
+	return ""
+}
+
 func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cmd := r.FormValue("command")
 	s.Calls = append(s.Calls, MockAPICall{
@@ -135,11 +144,31 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return obj
 		}
 
+	case "updateLoadBalancerRule":
+		lbID := r.FormValue("id")
+		lbName := s.lbNameByID(lbID)
+		if lbName == "" {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write(ErrorResponse("updateLoadBalancerRuleResponse", fmt.Sprintf("lb not found with id %v", lbID)))
+			return
+		}
+		ruleIdx := s.newID(cmd)
+		algorithm := r.FormValue("algorithm")
+		obj := cloudstack.UpdateLoadBalancerRuleResponse{
+			JobID: fmt.Sprintf("job-lbrule-update-%d", ruleIdx),
+		}
+		w.Write(MarshalResponse("updateLoadBalancerRuleResponse", obj))
+		s.jobs[obj.JobID] = func() interface{} {
+			s.lbRules[lbName]["algorithm"] = algorithm
+			fmt.Printf("response %#v\n", s.lbRules[lbName])
+			return s.lbRules[lbName]
+		}
+
 	case "createLoadBalancerRule":
 		lbname := r.FormValue("name")
 		if _, ok := s.lbRules[lbname]; ok {
 			w.WriteHeader(http.StatusConflict)
-			w.Write(ErrorResponse("createLoadBalancerRule", fmt.Sprintf("lb already exists with name %v", lbname)))
+			w.Write(ErrorResponse("createLoadBalancerRuleResponse", fmt.Sprintf("lb already exists with name %v", lbname)))
 			return
 		}
 		ruleIdx := s.newID(cmd)
@@ -240,12 +269,8 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(MarshalResponse("deleteLoadBalancerRuleResponse", obj))
 		s.jobs[obj.JobID] = func() interface{} {
-			for k, lb := range s.lbRules {
-				if lb["id"] == lbID {
-					delete(s.lbRules, k)
-					break
-				}
-			}
+			lbName := s.lbNameByID(lbID)
+			delete(s.lbRules, lbName)
 			delete(s.tags, lbID)
 			return obj
 		}
@@ -274,7 +299,9 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(MarshalResponse("queryAsyncJobResultResponse", map[string]interface{}{
 			"jobstatus": 1,
-			"jobresult": callback(),
+			"jobresult": map[string]interface{}{
+				"cmdResponse": callback(),
+			},
 		}))
 
 	default:

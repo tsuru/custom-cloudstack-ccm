@@ -640,20 +640,11 @@ func (pc *projectCloud) associatePublicIPAddress(service *v1.Service, networkID 
 	}
 	if result.JobID != "" {
 		glog.V(4).Infof("Querying async job %s for load balancer %s", result.JobID, ip)
-		var alternativeAsyncResult struct {
-			IPAddress struct {
-				IPAddress string `json:"ipaddress,omitempty"`
-			} `json:"ipaddress,omitempty"`
-		}
-		err = waitJob(client, result.JobID, &result, &alternativeAsyncResult)
+		err = waitJob(client, result.JobID, &result)
 		if err != nil {
 			return nil, err
 		}
-		if result.Ipaddress != "" {
-			ip.address = result.Ipaddress
-		} else {
-			ip.address = alternativeAsyncResult.IPAddress.IPAddress
-		}
+		ip.address = result.Ipaddress
 	}
 	glog.V(4).Infof("Allocated IP %s for service (%v, %v)", ip, service.Namespace, service.Name)
 
@@ -1134,6 +1125,10 @@ func waitJob(client *cloudstack.CloudStackClient, jobID string, results ...inter
 		return err
 	}
 	if len(results) > 0 {
+		data, err = getFirstRawValue(data)
+		if err != nil {
+			return err
+		}
 		for _, result := range results {
 			err = json.Unmarshal(data, result)
 			if err == nil {
@@ -1142,6 +1137,17 @@ func waitJob(client *cloudstack.CloudStackClient, jobID string, results ...inter
 		}
 	}
 	return err
+}
+
+func getFirstRawValue(raw json.RawMessage) (json.RawMessage, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	for _, v := range m {
+		return v, nil
+	}
+	return nil, fmt.Errorf("Unable to extract the raw value from:\n\n%s\n\n", string(raw))
 }
 
 func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
