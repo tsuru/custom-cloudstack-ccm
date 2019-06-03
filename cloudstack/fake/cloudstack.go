@@ -27,7 +27,7 @@ type CloudstackServer struct {
 	Calls   []MockAPICall
 	Hook    func(w http.ResponseWriter, r *http.Request) bool
 	idx     map[string]int
-	jobs    map[string]func() interface{}
+	Jobs    map[string]func() interface{}
 	tags    map[string][]cloudstack.Tag
 	lbRules map[string]loadBalancerRule
 	ips     map[string]cloudstack.PublicIpAddress
@@ -38,7 +38,7 @@ func NewCloudstackServer() *CloudstackServer {
 	cloudstackSrv := &CloudstackServer{
 		idx:     make(map[string]int),
 		lbRules: make(map[string]loadBalancerRule),
-		jobs:    make(map[string]func() interface{}),
+		Jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tag),
 		ips:     make(map[string]cloudstack.PublicIpAddress),
 		vms:     make(map[string][]*cloudstack.VirtualMachine),
@@ -63,6 +63,10 @@ func (s *CloudstackServer) lbNameByID(lbID string) string {
 		}
 	}
 	return ""
+}
+
+func (s *CloudstackServer) AddIP(ip cloudstack.PublicIpAddress) {
+	s.ips[ip.Id] = ip
 }
 
 func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +139,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-ip-%d", ipIdx),
 		}
 		w.Write(MarshalResponse("associateIpAddressResponse", obj))
-		s.jobs[obj.JobID] = func() interface{} {
+		s.Jobs[obj.JobID] = func() interface{} {
 			obj.Ipaddress = fmt.Sprintf("10.0.0.%d", ipIdx)
 			s.ips[ipID] = cloudstack.PublicIpAddress{
 				Id:        obj.Id,
@@ -156,7 +160,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-ip-disassociate-%d", jobIdx),
 		}
 		w.Write(MarshalResponse("disassociateIpAddressResponse", obj))
-		s.jobs[obj.JobID] = func() interface{} {
+		s.Jobs[obj.JobID] = func() interface{} {
 			delete(s.ips, ipID)
 			obj.Success = true
 			return obj
@@ -176,7 +180,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-lbrule-update-%d", ruleIdx),
 		}
 		w.Write(MarshalResponse("updateLoadBalancerRuleResponse", obj))
-		s.jobs[obj.JobID] = func() interface{} {
+		s.Jobs[obj.JobID] = func() interface{} {
 			s.lbRules[lbName]["algorithm"] = algorithm
 			fmt.Printf("response %#v\n", s.lbRules[lbName])
 			return s.lbRules[lbName]
@@ -213,7 +217,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if additionalPorts := r.FormValue("additionalportmap"); additionalPorts != "" {
 			obj["additionalportmap"] = strings.Split(r.FormValue("additionalportmap"), ",")
 		}
-		s.jobs[jobID] = func() interface{} {
+		s.Jobs[jobID] = func() interface{} {
 			s.lbRules[lbname] = obj
 			return obj
 		}
@@ -225,7 +229,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"jobid": fullID,
 		}
 		w.Write(MarshalResponse("assignNetworkToLBRuleResponse", obj))
-		s.jobs[fullID] = func() interface{} {
+		s.Jobs[fullID] = func() interface{} {
 			return obj
 		}
 
@@ -235,7 +239,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-tags-%d", tagsIdx),
 		}
 		w.Write(MarshalResponse("createTags", obj))
-		s.jobs[obj.JobID] = func() interface{} {
+		s.Jobs[obj.JobID] = func() interface{} {
 			s.tags[r.FormValue("resourceids")] = append(s.tags[r.FormValue("resourceids")], cloudstack.Tag{
 				Key:   r.FormValue("tags[0].key"),
 				Value: r.FormValue("tags[0].value"),
@@ -255,7 +259,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-host-assign-%d", hostAssignIdx),
 		}
 		w.Write(MarshalResponse("assignToLoadBalancerRuleResponse", obj))
-		s.jobs[obj.JobID] = func() interface{} {
+		s.Jobs[obj.JobID] = func() interface{} {
 			for _, vmID := range vmIDs {
 				s.vms[ruleId] = append(s.vms[ruleId], &cloudstack.VirtualMachine{
 					Id: vmID,
@@ -275,7 +279,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			ptrTags = append(ptrTags, &tags[i])
 		}
 		w.Write(MarshalResponse("listTagsResponse", cloudstack.ListTagsResponse{
-			Count: len(tags),
+			Count: len(ptrTags),
 			Tags:  ptrTags,
 		}))
 
@@ -286,7 +290,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			JobID: fmt.Sprintf("job-delete-lb-%d", deleteIdx),
 		}
 		w.Write(MarshalResponse("deleteLoadBalancerRuleResponse", obj))
-		s.jobs[obj.JobID] = func() interface{} {
+		s.Jobs[obj.JobID] = func() interface{} {
 			lbName := s.lbNameByID(lbID)
 			delete(s.lbRules, lbName)
 			delete(s.tags, lbID)
@@ -309,7 +313,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "queryAsyncJobResult":
 		jobID := r.FormValue("jobid")
-		callback := s.jobs[jobID]
+		callback := s.Jobs[jobID]
 		if callback == nil {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write(ErrorResponse("queryAsyncJobResultResponse", fmt.Sprintf("job id %q not found: %#v", jobID, r.URL.Query())))
