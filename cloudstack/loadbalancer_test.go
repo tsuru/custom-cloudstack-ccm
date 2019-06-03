@@ -607,6 +607,32 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "existing service with LB requesting change to explicit IP, IP not found error",
+			calls: []consecutiveCall{
+				{
+					svc:    baseSvc,
+					assert: baseAssert,
+				},
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Spec.LoadBalancerIP = "192.168.9.9"
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.Error(t, err)
+						assert.Contains(t, err.Error(), "could not find IP address 192.168.9.9")
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"ipaddress": []string{"192.168.9.9"}}},
+						})
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
