@@ -144,6 +144,24 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return obj
 		}
 
+	case "disassociateIpAddress":
+		ipID := r.FormValue("id")
+		if _, ok := s.ips[ipID]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write(ErrorResponse("disassociateIpAddressResponse", fmt.Sprintf("ip not found: %q", ipID)))
+			return
+		}
+		jobIdx := s.newID(cmd)
+		obj := cloudstack.DisassociateIpAddressResponse{
+			JobID: fmt.Sprintf("job-ip-disassociate-%d", jobIdx),
+		}
+		w.Write(MarshalResponse("disassociateIpAddressResponse", obj))
+		s.jobs[obj.JobID] = func() interface{} {
+			delete(s.ips, ipID)
+			obj.Success = true
+			return obj
+		}
+
 	case "updateLoadBalancerRule":
 		lbID := r.FormValue("id")
 		lbName := s.lbNameByID(lbID)
