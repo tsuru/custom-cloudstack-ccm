@@ -18,6 +18,7 @@ jobs:
     script:
     - docker login -u $DOCKER_USER -p $DOCKER_PASS
     - if [ -n "$TRAVIS_TAG" ]; then make TAG=$TRAVIS_TAG push; else make push; fi
+    if: "(NOT type IN (pull_request)) AND (branch = master) OR (tag IS present)"
 env:
   global:
   - secure: "TpqAxagi+7NFBedE3gl5p1qK56DP8nWPPHixbiaa7arPpUuiHTmUenaVUXQ7CMUQOlTbU7U3DETDHaGbMQh7WQngol0m92sdO1z3uwtC44Jk8cfW5fSbfGZsTMyWSBTASppxweP9+cO8Vjbcg4FuP92DuDjrjX/ucZoEVNQ27F6GQZ/geEsxS+rOIxhPiASpDX/Q1o3lEtoZQ38YNwXe14nJZVmI4kwMdHZQCliB8+Rc7fK6/0/QJeX3pzbeqHGTCk1EcMnthRvxBDGqwZ3f6o1Uj4DwUemPVpHckndbxYz+xMOO3E2jMDjg9HNHQ38ywZHr8tHk+pZqsvrg2wRAMxUTU2TOwlOh7RXc7oBmT5VtjompDRizTN1NBileyhQBM9LV6Hf/2zCXz92m7t+riM9Kj+ThBmzcoTNJtIivshJn9a66zOL4ON6hdvFPVaxTIuqzlj2vPBwt2OBBruATbkgv2kbdyvUyvBDsIo1mdeXrLD/4HddBdkJYxTCQZQ7fpq88AdEH3LAChOgVj2VJP6hDfME2HKhkD0B7I037QZ9K+VsyCvk81V6JqJRMcWxb/dO7/2cTs8zlqQB0aKdd3IFDir3rE45LcL7Dxh/HreTI/q9MNSfLCAqyJC/LUiSUahMtdGWKUeeXRUVIs2c4N8zV2GKherMfx42KKzng2F0="
