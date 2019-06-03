@@ -30,7 +30,7 @@ type CloudstackServer struct {
 	Jobs    map[string]func() interface{}
 	tags    map[string][]cloudstack.Tag
 	lbRules map[string]loadBalancerRule
-	ips     map[string]cloudstack.PublicIpAddress
+	ips     map[string]*cloudstack.PublicIpAddress
 	vms     map[string][]*cloudstack.VirtualMachine
 }
 
@@ -40,7 +40,7 @@ func NewCloudstackServer() *CloudstackServer {
 		lbRules: make(map[string]loadBalancerRule),
 		Jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tag),
-		ips:     make(map[string]cloudstack.PublicIpAddress),
+		ips:     make(map[string]*cloudstack.PublicIpAddress),
 		vms:     make(map[string][]*cloudstack.VirtualMachine),
 	}
 	cloudstackSrv.Server = httptest.NewServer(cloudstackSrv)
@@ -66,7 +66,7 @@ func (s *CloudstackServer) lbNameByID(lbID string) string {
 }
 
 func (s *CloudstackServer) AddIP(ip cloudstack.PublicIpAddress) {
-	s.ips[ip.Id] = ip
+	s.ips[ip.Id] = &ip
 }
 
 func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +102,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "listPublicIpAddresses":
 		r.ParseForm()
 		address := r.FormValue("ipaddress")
+		id := r.FormValue("id")
 		page, _ := strconv.Atoi(r.FormValue("page"))
 		if page > 0 {
 			w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
@@ -115,6 +116,9 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if address != "" && ip.Ipaddress != address {
 				continue
 			}
+			if id != "" && ip.Id != id {
+				continue
+			}
 			includeIP := len(tags) == 0
 			for _, tag := range s.tags[ip.Id] {
 				if tags[tag.Key] == tag.Value {
@@ -123,7 +127,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				ip.Tags = append(ip.Tags, cloudstack.PublicIpAddressTags(tag))
 			}
 			if includeIP {
-				ips = append(ips, &ip)
+				ips = append(ips, ip)
 			}
 		}
 		w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
@@ -141,7 +145,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(MarshalResponse("associateIpAddressResponse", obj))
 		s.Jobs[obj.JobID] = func() interface{} {
 			obj.Ipaddress = fmt.Sprintf("10.0.0.%d", ipIdx)
-			s.ips[ipID] = cloudstack.PublicIpAddress{
+			s.ips[ipID] = &cloudstack.PublicIpAddress{
 				Id:        obj.Id,
 				Ipaddress: obj.Ipaddress,
 			}
@@ -182,7 +186,6 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(MarshalResponse("updateLoadBalancerRuleResponse", obj))
 		s.Jobs[obj.JobID] = func() interface{} {
 			s.lbRules[lbName]["algorithm"] = algorithm
-			fmt.Printf("response %#v\n", s.lbRules[lbName])
 			return s.lbRules[lbName]
 		}
 
@@ -201,6 +204,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		ipObj := s.ips[r.FormValue("publicipid")]
 		if ipObj.Id == "" {
+			w.WriteHeader(http.StatusInternalServerError)
 			w.Write(ErrorResponse(cmd+"Response", fmt.Sprintf("ip id not found: %s", r.FormValue("publicipid"))))
 			return
 		}
@@ -300,7 +304,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "listLoadBalancerRuleInstances":
 		page, _ := strconv.Atoi(r.FormValue("page"))
 		if page > 0 {
-			w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
+			w.Write(MarshalResponse("listLoadBalancerRuleInstancesResponse", cloudstack.ListLoadBalancerRuleInstancesResponse{
 				Count: 0,
 			}))
 			return
