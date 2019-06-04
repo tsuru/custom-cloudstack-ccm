@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	"gopkg.in/gcfg.v1"
@@ -31,6 +32,10 @@ import (
 
 // ProviderName is the name of this cloud provider.
 const ProviderName = "custom-cloudstack"
+
+var (
+	asyncJobWaitTimeout = int64((5 * time.Minute).Seconds())
+)
 
 // CSConfig wraps the config for the CloudStack cloud provider.
 type CSConfig struct {
@@ -149,10 +154,12 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		if v.APIURL == "" || v.APIKey == "" || v.SecretKey == "" {
 			return nil, fmt.Errorf("missing credentials for environment %q", k)
 		}
+		csCli := cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify)
+		csCli.AsyncTimeout(asyncJobWaitTimeout)
 		cs.environments[k] = CSEnvironment{
 			lbEnvironmentID: v.LBEnvironmentID,
 			lbDomain:        v.LBDomain,
-			client:          cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify),
+			client:          csCli,
 			removeLBs:       v.RemoveLBs,
 		}
 	}

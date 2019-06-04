@@ -24,7 +24,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
@@ -41,12 +40,6 @@ const (
 
 	CloudstackResourceIPAdress     = "PublicIpAddress"
 	CloudstackResourceLoadBalancer = "LoadBalancer"
-)
-
-var (
-	asyncJobWaitTimeout = int64((2 * time.Minute).Seconds())
-
-	emptyIP = cloudstackIP{}
 )
 
 type projectCloud struct {
@@ -752,7 +745,7 @@ func (pc *projectCloud) releaseLoadBalancerIP(ip cloudstackIP) error {
 		return fmt.Errorf("error disassociate IP address using endpoint %q: %v", disassociateCommand, err)
 	}
 	if rsp.JobID != "" {
-		return waitJob(client, rsp.JobID)
+		return waitJob(client, rsp.JobID, nil)
 	}
 	return nil
 }
@@ -1083,7 +1076,7 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 	}
 	if result.JobID != "" {
 		glog.V(4).Infof("Querying async job %s for load balancer rule %s", result.JobID, lbRule.Id)
-		err = waitJob(client, result.JobID)
+		err = waitJob(client, result.JobID, nil)
 		if err != nil {
 			if !strings.Contains(err.Error(), "is already mapped") {
 				// we ignore the error if is in the form `Network XXX is already mapped to load balancer`
@@ -1163,26 +1156,25 @@ func symmetricDifference(hostIDs []string, lbInstances []*cloudstack.VirtualMach
 	return assign, remove
 }
 
-func waitJob(client *cloudstack.CloudStackClient, jobID string, results ...interface{}) error {
+func waitJob(client *cloudstack.CloudStackClient, jobID string, result interface{}) error {
 	pa := &cloudstack.QueryAsyncJobResultParams{}
 	pa.SetJobID(jobID)
 	data, err := client.GetAsyncJobResult(jobID, asyncJobWaitTimeout)
 	if err != nil {
 		return err
 	}
-	if len(results) > 0 {
-		data, err = getFirstRawValue(data)
-		if err != nil {
-			return err
-		}
-		for _, result := range results {
-			err = json.Unmarshal(data, result)
-			if err == nil {
-				break
-			}
-		}
+	if result == nil {
+		return nil
 	}
-	return err
+	firstData, err := getFirstRawValue(data)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(firstData, result)
+	if err != nil {
+		return json.Unmarshal(data, result)
+	}
+	return nil
 }
 
 func getFirstRawValue(raw json.RawMessage) (json.RawMessage, error) {
