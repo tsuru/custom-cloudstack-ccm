@@ -1225,7 +1225,7 @@ func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
 
 func listAllLBInstancesPages(client *cloudstack.CloudStackClient, params *cloudstack.ListLoadBalancerRuleInstancesParams) ([]*cloudstack.VirtualMachine, error) {
 	page := 0
-	params.SetPagesize(20)
+	params.SetPagesize(50)
 	var result []*cloudstack.VirtualMachine
 	for {
 		params.SetPage(page)
@@ -1233,10 +1233,10 @@ func listAllLBInstancesPages(client *cloudstack.CloudStackClient, params *clouds
 		if err != nil {
 			return nil, err
 		}
-		if l.Count == 0 {
+		result = append(result, l.LoadBalancerRuleInstances...)
+		if len(l.LoadBalancerRuleInstances) == 0 || l.Count == len(result) {
 			break
 		}
-		result = append(result, l.LoadBalancerRuleInstances...)
 		page++
 	}
 	return result, nil
@@ -1244,7 +1244,7 @@ func listAllLBInstancesPages(client *cloudstack.CloudStackClient, params *clouds
 
 func listAllIPPages(client *cloudstack.CloudStackClient, params *cloudstack.ListPublicIpAddressesParams) ([]*cloudstack.PublicIpAddress, error) {
 	page := 0
-	params.SetPagesize(20)
+	params.SetPagesize(50)
 	var result []*cloudstack.PublicIpAddress
 	for {
 		params.SetPage(page)
@@ -1252,10 +1252,10 @@ func listAllIPPages(client *cloudstack.CloudStackClient, params *cloudstack.List
 		if err != nil {
 			return nil, err
 		}
-		if l.Count == 0 {
+		result = append(result, l.PublicIpAddresses...)
+		if len(l.PublicIpAddresses) == 0 || l.Count == len(result) {
 			break
 		}
-		result = append(result, l.PublicIpAddresses...)
 		page++
 	}
 	return result, nil

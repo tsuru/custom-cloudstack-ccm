@@ -129,7 +129,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
-							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
 					},
 				},
@@ -226,7 +225,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"0"}}},
-							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"1"}}},
 							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
@@ -345,7 +343,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
-							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
 					},
 				},
@@ -547,7 +544,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
-							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
 					},
 				},

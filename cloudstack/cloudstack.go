@@ -17,8 +17,12 @@ limitations under the License.
 package cloudstack
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +30,7 @@ import (
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	"gopkg.in/gcfg.v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/transport"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	"k8s.io/kubernetes/pkg/controller"
 )
@@ -154,8 +159,25 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		if v.APIURL == "" || v.APIKey == "" || v.SecretKey == "" {
 			return nil, fmt.Errorf("missing credentials for environment %q", k)
 		}
+		jar, _ := cookiejar.New(nil)
 		csCli := cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify)
 		csCli.AsyncTimeout(asyncJobWaitTimeout)
+		baseTransport := &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: v.SSLNoVerify},
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+		csCli.HTTPClient(&http.Client{
+			Jar:       jar,
+			Transport: transport.DebugWrappers(baseTransport),
+			Timeout:   60 * time.Second,
+		})
 		cs.environments[k] = CSEnvironment{
 			lbEnvironmentID: v.LBEnvironmentID,
 			lbDomain:        v.LBDomain,
