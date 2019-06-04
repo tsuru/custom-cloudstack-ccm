@@ -378,12 +378,13 @@
   version = "v1.2.1"
 
 [[projects]]
-  branch = "master"
-  digest = "1:f4c90302c0bf617189881fc2bfa1df131239dea32294195731c5dbd7339dd699"
+  branch = "customhttpclient"
+  digest = "1:5dcfebd5a3e2aef0ac5424ac40e9e5e04f07691f69d09ce66307b02d6d6a89fc"
   name = "github.com/xanzy/go-cloudstack"
   packages = ["cloudstack"]
   pruneopts = "NUT"
-  revision = "42f262b63ed012a2842457eff71aabf26ac3d7c6"
+  revision = "bb214be038755d23eb8564ac94ac1cc4678894df"
+  source = "github.com/cezarsa/go-cloudstack"
 
 [[projects]]
   branch = "master"

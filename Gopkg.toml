@@ -17,7 +17,8 @@
 
 [[constraint]]
   name = "github.com/xanzy/go-cloudstack"
-  branch = "master"
+  source = "github.com/cezarsa/go-cloudstack"
+  branch = "customhttpclient"
 
 [[constraint]]
   name = "k8s.io/client-go"
