@@ -36,8 +36,15 @@ func (p *CreateSnapshotParams) toURLValues() url.Values {
 	if v, found := p.p["account"]; found {
 		u.Set("account", v.(string))
 	}
+	if v, found := p.p["asyncbackup"]; found {
+		vv := strconv.FormatBool(v.(bool))
+		u.Set("asyncbackup", vv)
+	}
 	if v, found := p.p["domainid"]; found {
 		u.Set("domainid", v.(string))
+	}
+	if v, found := p.p["locationtype"]; found {
+		u.Set("locationtype", v.(string))
 	}
 	if v, found := p.p["name"]; found {
 		u.Set("name", v.(string))
@@ -63,11 +70,27 @@ func (p *CreateSnapshotParams) SetAccount(v string) {
 	return
 }
 
+func (p *CreateSnapshotParams) SetAsyncbackup(v bool) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["asyncbackup"] = v
+	return
+}
+
 func (p *CreateSnapshotParams) SetDomainid(v string) {
 	if p.p == nil {
 		p.p = make(map[string]interface{})
 	}
 	p.p["domainid"] = v
+	return
+}
+
+func (p *CreateSnapshotParams) SetLocationtype(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["locationtype"] = v
 	return
 }
 
@@ -148,38 +171,57 @@ func (s *SnapshotService) CreateSnapshot(p *CreateSnapshotParams) (*CreateSnapsh
 }
 
 type CreateSnapshotResponse struct {
-	JobID        string                       `json:"jobid"`
-	Account      string                       `json:"account"`
-	Created      string                       `json:"created"`
-	Domain       string                       `json:"domain"`
-	Domainid     string                       `json:"domainid"`
-	Id           string                       `json:"id"`
-	Intervaltype string                       `json:"intervaltype"`
-	Name         string                       `json:"name"`
-	Physicalsize int64                        `json:"physicalsize"`
-	Project      string                       `json:"project"`
-	Projectid    string                       `json:"projectid"`
-	Revertable   bool                         `json:"revertable"`
-	Snapshottype string                       `json:"snapshottype"`
-	State        string                       `json:"state"`
-	Tags         []CreateSnapshotResponseTags `json:"tags"`
-	Volumeid     string                       `json:"volumeid"`
-	Volumename   string                       `json:"volumename"`
-	Volumetype   string                       `json:"volumetype"`
-	Zoneid       string                       `json:"zoneid"`
+	Account       string `json:"account"`
+	Created       string `json:"created"`
+	Domain        string `json:"domain"`
+	Domainid      string `json:"domainid"`
+	Id            string `json:"id"`
+	Intervaltype  string `json:"intervaltype"`
+	JobID         string `json:"jobid"`
+	Jobstatus     int    `json:"jobstatus"`
+	Locationtype  string `json:"locationtype"`
+	Name          string `json:"name"`
+	Osdisplayname string `json:"osdisplayname"`
+	Ostypeid      string `json:"ostypeid"`
+	Physicalsize  int64  `json:"physicalsize"`
+	Project       string `json:"project"`
+	Projectid     string `json:"projectid"`
+	Revertable    bool   `json:"revertable"`
+	Snapshottype  string `json:"snapshottype"`
+	State         string `json:"state"`
+	Tags          []Tags `json:"tags"`
+	Virtualsize   int64  `json:"virtualsize"`
+	Volumeid      string `json:"volumeid"`
+	Volumename    string `json:"volumename"`
+	Volumetype    string `json:"volumetype"`
+	Zoneid        string `json:"zoneid"`
 }
 
-type CreateSnapshotResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+func (r *CreateSnapshotResponse) UnmarshalJSON(b []byte) error {
+	var m map[string]interface{}
+	err := json.Unmarshal(b, &m)
+	if err != nil {
+		return err
+	}
+
+	if success, ok := m["success"].(string); ok {
+		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	type alias CreateSnapshotResponse
+	return json.Unmarshal(b, (*alias)(r))
 }
 
 type CreateSnapshotPolicyParams struct {
@@ -294,6 +336,8 @@ type CreateSnapshotPolicyResponse struct {
 	Fordisplay   bool   `json:"fordisplay"`
 	Id           string `json:"id"`
 	Intervaltype int    `json:"intervaltype"`
+	JobID        string `json:"jobid"`
+	Jobstatus    int    `json:"jobstatus"`
 	Maxsnaps     int    `json:"maxsnaps"`
 	Schedule     string `json:"schedule"`
 	Timezone     string `json:"timezone"`
@@ -414,7 +458,6 @@ func (s *SnapshotService) CreateVMSnapshot(p *CreateVMSnapshotParams) (*CreateVM
 }
 
 type CreateVMSnapshotResponse struct {
-	JobID            string `json:"jobid"`
 	Account          string `json:"account"`
 	Created          string `json:"created"`
 	Current          bool   `json:"current"`
@@ -423,6 +466,8 @@ type CreateVMSnapshotResponse struct {
 	Domain           string `json:"domain"`
 	Domainid         string `json:"domainid"`
 	Id               string `json:"id"`
+	JobID            string `json:"jobid"`
+	Jobstatus        int    `json:"jobstatus"`
 	Name             string `json:"name"`
 	Parent           string `json:"parent"`
 	ParentName       string `json:"parentName"`
@@ -497,8 +542,9 @@ func (s *SnapshotService) DeleteSnapshot(p *DeleteSnapshotParams) (*DeleteSnapsh
 }
 
 type DeleteSnapshotResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -562,6 +608,8 @@ func (s *SnapshotService) DeleteSnapshotPolicies(p *DeleteSnapshotPoliciesParams
 
 type DeleteSnapshotPoliciesResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -574,6 +622,14 @@ func (r *DeleteSnapshotPoliciesResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err
@@ -647,8 +703,9 @@ func (s *SnapshotService) DeleteVMSnapshot(p *DeleteVMSnapshotParams) (*DeleteVM
 }
 
 type DeleteVMSnapshotResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -798,6 +855,8 @@ type SnapshotPolicy struct {
 	Fordisplay   bool   `json:"fordisplay"`
 	Id           string `json:"id"`
 	Intervaltype int    `json:"intervaltype"`
+	JobID        string `json:"jobid"`
+	Jobstatus    int    `json:"jobstatus"`
 	Maxsnaps     int    `json:"maxsnaps"`
 	Schedule     string `json:"schedule"`
 	Timezone     string `json:"timezone"`
@@ -1114,37 +1173,57 @@ type ListSnapshotsResponse struct {
 }
 
 type Snapshot struct {
-	Account      string         `json:"account"`
-	Created      string         `json:"created"`
-	Domain       string         `json:"domain"`
-	Domainid     string         `json:"domainid"`
-	Id           string         `json:"id"`
-	Intervaltype string         `json:"intervaltype"`
-	Name         string         `json:"name"`
-	Physicalsize int64          `json:"physicalsize"`
-	Project      string         `json:"project"`
-	Projectid    string         `json:"projectid"`
-	Revertable   bool           `json:"revertable"`
-	Snapshottype string         `json:"snapshottype"`
-	State        string         `json:"state"`
-	Tags         []SnapshotTags `json:"tags"`
-	Volumeid     string         `json:"volumeid"`
-	Volumename   string         `json:"volumename"`
-	Volumetype   string         `json:"volumetype"`
-	Zoneid       string         `json:"zoneid"`
+	Account       string `json:"account"`
+	Created       string `json:"created"`
+	Domain        string `json:"domain"`
+	Domainid      string `json:"domainid"`
+	Id            string `json:"id"`
+	Intervaltype  string `json:"intervaltype"`
+	JobID         string `json:"jobid"`
+	Jobstatus     int    `json:"jobstatus"`
+	Locationtype  string `json:"locationtype"`
+	Name          string `json:"name"`
+	Osdisplayname string `json:"osdisplayname"`
+	Ostypeid      string `json:"ostypeid"`
+	Physicalsize  int64  `json:"physicalsize"`
+	Project       string `json:"project"`
+	Projectid     string `json:"projectid"`
+	Revertable    bool   `json:"revertable"`
+	Snapshottype  string `json:"snapshottype"`
+	State         string `json:"state"`
+	Tags          []Tags `json:"tags"`
+	Virtualsize   int64  `json:"virtualsize"`
+	Volumeid      string `json:"volumeid"`
+	Volumename    string `json:"volumename"`
+	Volumetype    string `json:"volumetype"`
+	Zoneid        string `json:"zoneid"`
 }
 
-type SnapshotTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+func (r *Snapshot) UnmarshalJSON(b []byte) error {
+	var m map[string]interface{}
+	err := json.Unmarshal(b, &m)
+	if err != nil {
+		return err
+	}
+
+	if success, ok := m["success"].(string); ok {
+		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	type alias Snapshot
+	return json.Unmarshal(b, (*alias)(r))
 }
 
 type ListVMSnapshotParams struct {
@@ -1396,6 +1475,8 @@ type VMSnapshot struct {
 	Domain           string `json:"domain"`
 	Domainid         string `json:"domainid"`
 	Id               string `json:"id"`
+	JobID            string `json:"jobid"`
+	Jobstatus        int    `json:"jobstatus"`
 	Name             string `json:"name"`
 	Parent           string `json:"parent"`
 	ParentName       string `json:"parentName"`
@@ -1475,38 +1556,57 @@ func (s *SnapshotService) RevertSnapshot(p *RevertSnapshotParams) (*RevertSnapsh
 }
 
 type RevertSnapshotResponse struct {
-	JobID        string                       `json:"jobid"`
-	Account      string                       `json:"account"`
-	Created      string                       `json:"created"`
-	Domain       string                       `json:"domain"`
-	Domainid     string                       `json:"domainid"`
-	Id           string                       `json:"id"`
-	Intervaltype string                       `json:"intervaltype"`
-	Name         string                       `json:"name"`
-	Physicalsize int64                        `json:"physicalsize"`
-	Project      string                       `json:"project"`
-	Projectid    string                       `json:"projectid"`
-	Revertable   bool                         `json:"revertable"`
-	Snapshottype string                       `json:"snapshottype"`
-	State        string                       `json:"state"`
-	Tags         []RevertSnapshotResponseTags `json:"tags"`
-	Volumeid     string                       `json:"volumeid"`
-	Volumename   string                       `json:"volumename"`
-	Volumetype   string                       `json:"volumetype"`
-	Zoneid       string                       `json:"zoneid"`
+	Account       string `json:"account"`
+	Created       string `json:"created"`
+	Domain        string `json:"domain"`
+	Domainid      string `json:"domainid"`
+	Id            string `json:"id"`
+	Intervaltype  string `json:"intervaltype"`
+	JobID         string `json:"jobid"`
+	Jobstatus     int    `json:"jobstatus"`
+	Locationtype  string `json:"locationtype"`
+	Name          string `json:"name"`
+	Osdisplayname string `json:"osdisplayname"`
+	Ostypeid      string `json:"ostypeid"`
+	Physicalsize  int64  `json:"physicalsize"`
+	Project       string `json:"project"`
+	Projectid     string `json:"projectid"`
+	Revertable    bool   `json:"revertable"`
+	Snapshottype  string `json:"snapshottype"`
+	State         string `json:"state"`
+	Tags          []Tags `json:"tags"`
+	Virtualsize   int64  `json:"virtualsize"`
+	Volumeid      string `json:"volumeid"`
+	Volumename    string `json:"volumename"`
+	Volumetype    string `json:"volumetype"`
+	Zoneid        string `json:"zoneid"`
 }
 
-type RevertSnapshotResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+func (r *RevertSnapshotResponse) UnmarshalJSON(b []byte) error {
+	var m map[string]interface{}
+	err := json.Unmarshal(b, &m)
+	if err != nil {
+		return err
+	}
+
+	if success, ok := m["success"].(string); ok {
+		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	type alias RevertSnapshotResponse
+	return json.Unmarshal(b, (*alias)(r))
 }
 
 type RevertToVMSnapshotParams struct {
@@ -1577,7 +1677,6 @@ func (s *SnapshotService) RevertToVMSnapshot(p *RevertToVMSnapshotParams) (*Reve
 }
 
 type RevertToVMSnapshotResponse struct {
-	JobID                 string                                    `json:"jobid"`
 	Account               string                                    `json:"account"`
 	Affinitygroup         []RevertToVMSnapshotResponseAffinitygroup `json:"affinitygroup"`
 	Cpunumber             int                                       `json:"cpunumber"`
@@ -1609,6 +1708,8 @@ type RevertToVMSnapshotResponse struct {
 	Isodisplaytext        string                                    `json:"isodisplaytext"`
 	Isoid                 string                                    `json:"isoid"`
 	Isoname               string                                    `json:"isoname"`
+	JobID                 string                                    `json:"jobid"`
+	Jobstatus             int                                       `json:"jobstatus"`
 	Keypair               string                                    `json:"keypair"`
 	Memory                int                                       `json:"memory"`
 	Memoryintfreekbs      int64                                     `json:"memoryintfreekbs"`
@@ -1617,8 +1718,8 @@ type RevertToVMSnapshotResponse struct {
 	Name                  string                                    `json:"name"`
 	Networkkbsread        int64                                     `json:"networkkbsread"`
 	Networkkbswrite       int64                                     `json:"networkkbswrite"`
-	Nic                   []RevertToVMSnapshotResponseNic           `json:"nic"`
-	Ostypeid              int64                                     `json:"ostypeid"`
+	Nic                   []Nic                                     `json:"nic"`
+	Ostypeid              string                                    `json:"ostypeid"`
 	Password              string                                    `json:"password"`
 	Passwordenabled       bool                                      `json:"passwordenabled"`
 	Project               string                                    `json:"project"`
@@ -1632,6 +1733,7 @@ type RevertToVMSnapshotResponse struct {
 	Serviceofferingname   string                                    `json:"serviceofferingname"`
 	Servicestate          string                                    `json:"servicestate"`
 	State                 string                                    `json:"state"`
+	Tags                  []Tags                                    `json:"tags"`
 	Templatedisplaytext   string                                    `json:"templatedisplaytext"`
 	Templateid            string                                    `json:"templateid"`
 	Templatename          string                                    `json:"templatename"`
@@ -1643,84 +1745,32 @@ type RevertToVMSnapshotResponse struct {
 }
 
 type RevertToVMSnapshotResponseSecuritygroup struct {
-	Account             string                                               `json:"account"`
-	Description         string                                               `json:"description"`
-	Domain              string                                               `json:"domain"`
-	Domainid            string                                               `json:"domainid"`
-	Egressrule          []RevertToVMSnapshotResponseSecuritygroupEgressrule  `json:"egressrule"`
-	Id                  string                                               `json:"id"`
-	Ingressrule         []RevertToVMSnapshotResponseSecuritygroupIngressrule `json:"ingressrule"`
-	Name                string                                               `json:"name"`
-	Project             string                                               `json:"project"`
-	Projectid           string                                               `json:"projectid"`
-	Tags                []RevertToVMSnapshotResponseSecuritygroupTags        `json:"tags"`
-	Virtualmachinecount int                                                  `json:"virtualmachinecount"`
-	Virtualmachineids   []interface{}                                        `json:"virtualmachineids"`
+	Account             string                                        `json:"account"`
+	Description         string                                        `json:"description"`
+	Domain              string                                        `json:"domain"`
+	Domainid            string                                        `json:"domainid"`
+	Egressrule          []RevertToVMSnapshotResponseSecuritygroupRule `json:"egressrule"`
+	Id                  string                                        `json:"id"`
+	Ingressrule         []RevertToVMSnapshotResponseSecuritygroupRule `json:"ingressrule"`
+	Name                string                                        `json:"name"`
+	Project             string                                        `json:"project"`
+	Projectid           string                                        `json:"projectid"`
+	Tags                []Tags                                        `json:"tags"`
+	Virtualmachinecount int                                           `json:"virtualmachinecount"`
+	Virtualmachineids   []interface{}                                 `json:"virtualmachineids"`
 }
 
-type RevertToVMSnapshotResponseSecuritygroupTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type RevertToVMSnapshotResponseSecuritygroupEgressrule struct {
-	Account           string                                                  `json:"account"`
-	Cidr              string                                                  `json:"cidr"`
-	Endport           int                                                     `json:"endport"`
-	Icmpcode          int                                                     `json:"icmpcode"`
-	Icmptype          int                                                     `json:"icmptype"`
-	Protocol          string                                                  `json:"protocol"`
-	Ruleid            string                                                  `json:"ruleid"`
-	Securitygroupname string                                                  `json:"securitygroupname"`
-	Startport         int                                                     `json:"startport"`
-	Tags              []RevertToVMSnapshotResponseSecuritygroupEgressruleTags `json:"tags"`
-}
-
-type RevertToVMSnapshotResponseSecuritygroupEgressruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type RevertToVMSnapshotResponseSecuritygroupIngressrule struct {
-	Account           string                                                   `json:"account"`
-	Cidr              string                                                   `json:"cidr"`
-	Endport           int                                                      `json:"endport"`
-	Icmpcode          int                                                      `json:"icmpcode"`
-	Icmptype          int                                                      `json:"icmptype"`
-	Protocol          string                                                   `json:"protocol"`
-	Ruleid            string                                                   `json:"ruleid"`
-	Securitygroupname string                                                   `json:"securitygroupname"`
-	Startport         int                                                      `json:"startport"`
-	Tags              []RevertToVMSnapshotResponseSecuritygroupIngressruleTags `json:"tags"`
-}
-
-type RevertToVMSnapshotResponseSecuritygroupIngressruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+type RevertToVMSnapshotResponseSecuritygroupRule struct {
+	Account           string `json:"account"`
+	Cidr              string `json:"cidr"`
+	Endport           int    `json:"endport"`
+	Icmpcode          int    `json:"icmpcode"`
+	Icmptype          int    `json:"icmptype"`
+	Protocol          string `json:"protocol"`
+	Ruleid            string `json:"ruleid"`
+	Securitygroupname string `json:"securitygroupname"`
+	Startport         int    `json:"startport"`
+	Tags              []Tags `json:"tags"`
 }
 
 type RevertToVMSnapshotResponseAffinitygroup struct {
@@ -1736,30 +1786,31 @@ type RevertToVMSnapshotResponseAffinitygroup struct {
 	VirtualmachineIds []string `json:"virtualmachineIds"`
 }
 
-type RevertToVMSnapshotResponseNic struct {
-	Broadcasturi         string `json:"broadcasturi"`
-	Deviceid             string `json:"deviceid"`
-	Gateway              string `json:"gateway"`
-	Id                   string `json:"id"`
-	Ip6address           string `json:"ip6address"`
-	Ip6cidr              string `json:"ip6cidr"`
-	Ip6gateway           string `json:"ip6gateway"`
-	Ipaddress            string `json:"ipaddress"`
-	Isdefault            bool   `json:"isdefault"`
-	Isolationuri         string `json:"isolationuri"`
-	Macaddress           string `json:"macaddress"`
-	Netmask              string `json:"netmask"`
-	Networkid            string `json:"networkid"`
-	Networkname          string `json:"networkname"`
-	Nsxlogicalswitch     string `json:"nsxlogicalswitch"`
-	Nsxlogicalswitchport string `json:"nsxlogicalswitchport"`
-	Secondaryip          []struct {
-		Id        string `json:"id"`
-		Ipaddress string `json:"ipaddress"`
-	} `json:"secondaryip"`
-	Traffictype      string `json:"traffictype"`
-	Type             string `json:"type"`
-	Virtualmachineid string `json:"virtualmachineid"`
+func (r *RevertToVMSnapshotResponse) UnmarshalJSON(b []byte) error {
+	var m map[string]interface{}
+	err := json.Unmarshal(b, &m)
+	if err != nil {
+		return err
+	}
+
+	if success, ok := m["success"].(string); ok {
+		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	type alias RevertToVMSnapshotResponse
+	return json.Unmarshal(b, (*alias)(r))
 }
 
 type UpdateSnapshotPolicyParams struct {
@@ -1852,10 +1903,11 @@ func (s *SnapshotService) UpdateSnapshotPolicy(p *UpdateSnapshotPolicyParams) (*
 }
 
 type UpdateSnapshotPolicyResponse struct {
-	JobID        string `json:"jobid"`
 	Fordisplay   bool   `json:"fordisplay"`
 	Id           string `json:"id"`
 	Intervaltype int    `json:"intervaltype"`
+	JobID        string `json:"jobid"`
+	Jobstatus    int    `json:"jobstatus"`
 	Maxsnaps     int    `json:"maxsnaps"`
 	Schedule     string `json:"schedule"`
 	Timezone     string `json:"timezone"`

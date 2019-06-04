@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -96,6 +97,8 @@ func (s *RoleService) CreateRole(p *CreateRoleParams) (*CreateRoleResponse, erro
 type CreateRoleResponse struct {
 	Description string `json:"description"`
 	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 }
@@ -185,6 +188,8 @@ func (s *RoleService) CreateRolePermission(p *CreateRolePermissionParams) (*Crea
 type CreateRolePermissionResponse struct {
 	Description string `json:"description"`
 	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Permission  string `json:"permission"`
 	Roleid      string `json:"roleid"`
 	Rolename    string `json:"rolename"`
@@ -240,6 +245,8 @@ func (s *RoleService) DeleteRole(p *DeleteRoleParams) (*DeleteRoleResponse, erro
 
 type DeleteRoleResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -252,6 +259,14 @@ func (r *DeleteRoleResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err
@@ -311,6 +326,8 @@ func (s *RoleService) DeleteRolePermission(p *DeleteRolePermissionParams) (*Dele
 
 type DeleteRolePermissionResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -323,6 +340,14 @@ func (r *DeleteRolePermissionResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err
@@ -387,6 +412,8 @@ type ListRolePermissionsResponse struct {
 type RolePermission struct {
 	Description string `json:"description"`
 	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Permission  string `json:"permission"`
 	Roleid      string `json:"roleid"`
 	Rolename    string `json:"rolename"`
@@ -552,6 +579,8 @@ type ListRolesResponse struct {
 type Role struct {
 	Description string `json:"description"`
 	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 }
@@ -637,27 +666,12 @@ func (s *RoleService) UpdateRole(p *UpdateRoleParams) (*UpdateRoleResponse, erro
 }
 
 type UpdateRoleResponse struct {
-	Displaytext string `json:"displaytext"`
-	Success     bool   `json:"success"`
-}
-
-func (r *UpdateRoleResponse) UnmarshalJSON(b []byte) error {
-	var m map[string]interface{}
-	err := json.Unmarshal(b, &m)
-	if err != nil {
-		return err
-	}
-
-	if success, ok := m["success"].(string); ok {
-		m["success"] = success == "true"
-		b, err = json.Marshal(m)
-		if err != nil {
-			return err
-		}
-	}
-
-	type alias UpdateRoleResponse
-	return json.Unmarshal(b, (*alias)(r))
+	Description string `json:"description"`
+	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
 }
 
 type UpdateRolePermissionParams struct {
@@ -669,8 +683,14 @@ func (p *UpdateRolePermissionParams) toURLValues() url.Values {
 	if p.p == nil {
 		return u
 	}
+	if v, found := p.p["permission"]; found {
+		u.Set("permission", v.(string))
+	}
 	if v, found := p.p["roleid"]; found {
 		u.Set("roleid", v.(string))
+	}
+	if v, found := p.p["ruleid"]; found {
+		u.Set("ruleid", v.(string))
 	}
 	if v, found := p.p["ruleorder"]; found {
 		vv := strings.Join(v.([]string), ",")
@@ -679,11 +699,27 @@ func (p *UpdateRolePermissionParams) toURLValues() url.Values {
 	return u
 }
 
+func (p *UpdateRolePermissionParams) SetPermission(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["permission"] = v
+	return
+}
+
 func (p *UpdateRolePermissionParams) SetRoleid(v string) {
 	if p.p == nil {
 		p.p = make(map[string]interface{})
 	}
 	p.p["roleid"] = v
+	return
+}
+
+func (p *UpdateRolePermissionParams) SetRuleid(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["ruleid"] = v
 	return
 }
 
@@ -697,11 +733,10 @@ func (p *UpdateRolePermissionParams) SetRuleorder(v []string) {
 
 // You should always use this function to get a new UpdateRolePermissionParams instance,
 // as then you are sure you have configured all required params
-func (s *RoleService) NewUpdateRolePermissionParams(roleid string, ruleorder []string) *UpdateRolePermissionParams {
+func (s *RoleService) NewUpdateRolePermissionParams(roleid string) *UpdateRolePermissionParams {
 	p := &UpdateRolePermissionParams{}
 	p.p = make(map[string]interface{})
 	p.p["roleid"] = roleid
-	p.p["ruleorder"] = ruleorder
 	return p
 }
 
@@ -722,6 +757,8 @@ func (s *RoleService) UpdateRolePermission(p *UpdateRolePermissionParams) (*Upda
 
 type UpdateRolePermissionResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -734,6 +771,14 @@ func (r *UpdateRolePermissionResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err

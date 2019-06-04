@@ -127,10 +127,11 @@ func (s *NetworkService) AddNetworkServiceProvider(p *AddNetworkServiceProviderP
 }
 
 type AddNetworkServiceProviderResponse struct {
-	JobID                        string   `json:"jobid"`
 	Canenableindividualservice   bool     `json:"canenableindividualservice"`
 	Destinationphysicalnetworkid string   `json:"destinationphysicalnetworkid"`
 	Id                           string   `json:"id"`
+	JobID                        string   `json:"jobid"`
+	Jobstatus                    int      `json:"jobstatus"`
 	Name                         string   `json:"name"`
 	Physicalnetworkid            string   `json:"physicalnetworkid"`
 	Servicelist                  []string `json:"servicelist"`
@@ -241,8 +242,9 @@ func (s *NetworkService) AddOpenDaylightController(p *AddOpenDaylightControllerP
 }
 
 type AddOpenDaylightControllerResponse struct {
-	JobID             string `json:"jobid"`
 	Id                string `json:"id"`
+	JobID             string `json:"jobid"`
+	Jobstatus         int    `json:"jobstatus"`
 	Name              string `json:"name"`
 	Physicalnetworkid string `json:"physicalnetworkid"`
 	Url               string `json:"url"`
@@ -267,6 +269,10 @@ func (p *CreateNetworkParams) toURLValues() url.Values {
 	if v, found := p.p["acltype"]; found {
 		u.Set("acltype", v.(string))
 	}
+	if v, found := p.p["bypassvlanoverlapcheck"]; found {
+		vv := strconv.FormatBool(v.(bool))
+		u.Set("bypassvlanoverlapcheck", vv)
+	}
 	if v, found := p.p["displaynetwork"]; found {
 		vv := strconv.FormatBool(v.(bool))
 		u.Set("displaynetwork", vv)
@@ -282,6 +288,9 @@ func (p *CreateNetworkParams) toURLValues() url.Values {
 	}
 	if v, found := p.p["endipv6"]; found {
 		u.Set("endipv6", v.(string))
+	}
+	if v, found := p.p["externalid"]; found {
+		u.Set("externalid", v.(string))
 	}
 	if v, found := p.p["gateway"]; found {
 		u.Set("gateway", v.(string))
@@ -359,6 +368,14 @@ func (p *CreateNetworkParams) SetAcltype(v string) {
 	return
 }
 
+func (p *CreateNetworkParams) SetBypassvlanoverlapcheck(v bool) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["bypassvlanoverlapcheck"] = v
+	return
+}
+
 func (p *CreateNetworkParams) SetDisplaynetwork(v bool) {
 	if p.p == nil {
 		p.p = make(map[string]interface{})
@@ -396,6 +413,14 @@ func (p *CreateNetworkParams) SetEndipv6(v string) {
 		p.p = make(map[string]interface{})
 	}
 	p.p["endipv6"] = v
+	return
+}
+
+func (p *CreateNetworkParams) SetExternalid(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["externalid"] = v
 	return
 }
 
@@ -572,6 +597,7 @@ type CreateNetworkResponse struct {
 	Dns2                        string                         `json:"dns2"`
 	Domain                      string                         `json:"domain"`
 	Domainid                    string                         `json:"domainid"`
+	Externalid                  string                         `json:"externalid"`
 	Gateway                     string                         `json:"gateway"`
 	Id                          string                         `json:"id"`
 	Ip6cidr                     string                         `json:"ip6cidr"`
@@ -579,6 +605,8 @@ type CreateNetworkResponse struct {
 	Isdefault                   bool                           `json:"isdefault"`
 	Ispersistent                bool                           `json:"ispersistent"`
 	Issystem                    bool                           `json:"issystem"`
+	JobID                       string                         `json:"jobid"`
+	Jobstatus                   int                            `json:"jobstatus"`
 	Name                        string                         `json:"name"`
 	Netmask                     string                         `json:"netmask"`
 	Networkcidr                 string                         `json:"networkcidr"`
@@ -591,6 +619,7 @@ type CreateNetworkResponse struct {
 	Physicalnetworkid           string                         `json:"physicalnetworkid"`
 	Project                     string                         `json:"project"`
 	Projectid                   string                         `json:"projectid"`
+	Redundantrouter             bool                           `json:"redundantrouter"`
 	Related                     string                         `json:"related"`
 	Reservediprange             string                         `json:"reservediprange"`
 	Restartrequired             bool                           `json:"restartrequired"`
@@ -599,7 +628,7 @@ type CreateNetworkResponse struct {
 	State                       string                         `json:"state"`
 	Strechedl2subnet            bool                           `json:"strechedl2subnet"`
 	Subdomainaccess             bool                           `json:"subdomainaccess"`
-	Tags                        []CreateNetworkResponseTags    `json:"tags"`
+	Tags                        []Tags                         `json:"tags"`
 	Traffictype                 string                         `json:"traffictype"`
 	Type                        string                         `json:"type"`
 	Vlan                        string                         `json:"vlan"`
@@ -615,12 +644,6 @@ type CreateNetworkResponseService struct {
 	Provider   []CreateNetworkResponseServiceProvider   `json:"provider"`
 }
 
-type CreateNetworkResponseServiceCapability struct {
-	Canchooseservicecapability bool   `json:"canchooseservicecapability"`
-	Name                       string `json:"name"`
-	Value                      string `json:"value"`
-}
-
 type CreateNetworkResponseServiceProvider struct {
 	Canenableindividualservice   bool     `json:"canenableindividualservice"`
 	Destinationphysicalnetworkid string   `json:"destinationphysicalnetworkid"`
@@ -631,17 +654,10 @@ type CreateNetworkResponseServiceProvider struct {
 	State                        string   `json:"state"`
 }
 
-type CreateNetworkResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+type CreateNetworkResponseServiceCapability struct {
+	Canchooseservicecapability bool   `json:"canchooseservicecapability"`
+	Name                       string `json:"name"`
+	Value                      string `json:"value"`
 }
 
 type CreatePhysicalNetworkParams struct {
@@ -792,11 +808,12 @@ func (s *NetworkService) CreatePhysicalNetwork(p *CreatePhysicalNetworkParams) (
 }
 
 type CreatePhysicalNetworkResponse struct {
-	JobID                string `json:"jobid"`
 	Broadcastdomainrange string `json:"broadcastdomainrange"`
 	Domainid             string `json:"domainid"`
 	Id                   string `json:"id"`
 	Isolationmethods     string `json:"isolationmethods"`
+	JobID                string `json:"jobid"`
+	Jobstatus            int    `json:"jobstatus"`
 	Name                 string `json:"name"`
 	Networkspeed         string `json:"networkspeed"`
 	State                string `json:"state"`
@@ -966,12 +983,13 @@ func (s *NetworkService) CreateServiceInstance(p *CreateServiceInstanceParams) (
 }
 
 type CreateServiceInstanceResponse struct {
-	JobID       string `json:"jobid"`
 	Account     string `json:"account"`
 	Displayname string `json:"displayname"`
 	Domain      string `json:"domain"`
 	Domainid    string `json:"domainid"`
 	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Name        string `json:"name"`
 	Project     string `json:"project"`
 	Projectid   string `json:"projectid"`
@@ -1104,10 +1122,11 @@ func (s *NetworkService) CreateStorageNetworkIpRange(p *CreateStorageNetworkIpRa
 }
 
 type CreateStorageNetworkIpRangeResponse struct {
-	JobID     string `json:"jobid"`
 	Endip     string `json:"endip"`
 	Gateway   string `json:"gateway"`
 	Id        string `json:"id"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
 	Netmask   string `json:"netmask"`
 	Networkid string `json:"networkid"`
 	Podid     string `json:"podid"`
@@ -1204,11 +1223,14 @@ type DedicatePublicIpRangeResponse struct {
 	Domainid          string `json:"domainid"`
 	Endip             string `json:"endip"`
 	Endipv6           string `json:"endipv6"`
+	Forsystemvms      bool   `json:"forsystemvms"`
 	Forvirtualnetwork bool   `json:"forvirtualnetwork"`
 	Gateway           string `json:"gateway"`
 	Id                string `json:"id"`
 	Ip6cidr           string `json:"ip6cidr"`
 	Ip6gateway        string `json:"ip6gateway"`
+	JobID             string `json:"jobid"`
+	Jobstatus         int    `json:"jobstatus"`
 	Netmask           string `json:"netmask"`
 	Networkid         string `json:"networkid"`
 	Physicalnetworkid string `json:"physicalnetworkid"`
@@ -1297,8 +1319,9 @@ func (s *NetworkService) DeleteNetwork(p *DeleteNetworkParams) (*DeleteNetworkRe
 }
 
 type DeleteNetworkResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -1365,8 +1388,9 @@ func (s *NetworkService) DeleteNetworkServiceProvider(p *DeleteNetworkServicePro
 }
 
 type DeleteNetworkServiceProviderResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -1438,8 +1462,9 @@ func (s *NetworkService) DeleteOpenDaylightController(p *DeleteOpenDaylightContr
 }
 
 type DeleteOpenDaylightControllerResponse struct {
-	JobID             string `json:"jobid"`
 	Id                string `json:"id"`
+	JobID             string `json:"jobid"`
+	Jobstatus         int    `json:"jobstatus"`
 	Name              string `json:"name"`
 	Physicalnetworkid string `json:"physicalnetworkid"`
 	Url               string `json:"url"`
@@ -1509,8 +1534,9 @@ func (s *NetworkService) DeletePhysicalNetwork(p *DeletePhysicalNetworkParams) (
 }
 
 type DeletePhysicalNetworkResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -1577,219 +1603,10 @@ func (s *NetworkService) DeleteStorageNetworkIpRange(p *DeleteStorageNetworkIpRa
 }
 
 type DeleteStorageNetworkIpRangeResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
-}
-
-type ListF5LoadBalancerNetworksParams struct {
-	p map[string]interface{}
-}
-
-func (p *ListF5LoadBalancerNetworksParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["keyword"]; found {
-		u.Set("keyword", v.(string))
-	}
-	if v, found := p.p["lbdeviceid"]; found {
-		u.Set("lbdeviceid", v.(string))
-	}
-	if v, found := p.p["page"]; found {
-		vv := strconv.Itoa(v.(int))
-		u.Set("page", vv)
-	}
-	if v, found := p.p["pagesize"]; found {
-		vv := strconv.Itoa(v.(int))
-		u.Set("pagesize", vv)
-	}
-	return u
-}
-
-func (p *ListF5LoadBalancerNetworksParams) SetKeyword(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["keyword"] = v
-	return
-}
-
-func (p *ListF5LoadBalancerNetworksParams) SetLbdeviceid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["lbdeviceid"] = v
-	return
-}
-
-func (p *ListF5LoadBalancerNetworksParams) SetPage(v int) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["page"] = v
-	return
-}
-
-func (p *ListF5LoadBalancerNetworksParams) SetPagesize(v int) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["pagesize"] = v
-	return
-}
-
-// You should always use this function to get a new ListF5LoadBalancerNetworksParams instance,
-// as then you are sure you have configured all required params
-func (s *NetworkService) NewListF5LoadBalancerNetworksParams(lbdeviceid string) *ListF5LoadBalancerNetworksParams {
-	p := &ListF5LoadBalancerNetworksParams{}
-	p.p = make(map[string]interface{})
-	p.p["lbdeviceid"] = lbdeviceid
-	return p
-}
-
-// This is a courtesy helper function, which in some cases may not work as expected!
-func (s *NetworkService) GetF5LoadBalancerNetworkID(keyword string, lbdeviceid string, opts ...OptionFunc) (string, int, error) {
-	p := &ListF5LoadBalancerNetworksParams{}
-	p.p = make(map[string]interface{})
-
-	p.p["keyword"] = keyword
-	p.p["lbdeviceid"] = lbdeviceid
-
-	for _, fn := range append(s.cs.options, opts...) {
-		if err := fn(s.cs, p); err != nil {
-			return "", -1, err
-		}
-	}
-
-	l, err := s.ListF5LoadBalancerNetworks(p)
-	if err != nil {
-		return "", -1, err
-	}
-
-	if l.Count == 0 {
-		return "", l.Count, fmt.Errorf("No match found for %s: %+v", keyword, l)
-	}
-
-	if l.Count == 1 {
-		return l.F5LoadBalancerNetworks[0].Id, l.Count, nil
-	}
-
-	if l.Count > 1 {
-		for _, v := range l.F5LoadBalancerNetworks {
-			if v.Name == keyword {
-				return v.Id, l.Count, nil
-			}
-		}
-	}
-	return "", l.Count, fmt.Errorf("Could not find an exact match for %s: %+v", keyword, l)
-}
-
-// lists network that are using a F5 load balancer device
-func (s *NetworkService) ListF5LoadBalancerNetworks(p *ListF5LoadBalancerNetworksParams) (*ListF5LoadBalancerNetworksResponse, error) {
-	resp, err := s.cs.newRequest("listF5LoadBalancerNetworks", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r ListF5LoadBalancerNetworksResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	return &r, nil
-}
-
-type ListF5LoadBalancerNetworksResponse struct {
-	Count                  int                      `json:"count"`
-	F5LoadBalancerNetworks []*F5LoadBalancerNetwork `json:"f5loadbalancernetwork"`
-}
-
-type F5LoadBalancerNetwork struct {
-	Account                     string                         `json:"account"`
-	Aclid                       string                         `json:"aclid"`
-	Acltype                     string                         `json:"acltype"`
-	Broadcastdomaintype         string                         `json:"broadcastdomaintype"`
-	Broadcasturi                string                         `json:"broadcasturi"`
-	Canusefordeploy             bool                           `json:"canusefordeploy"`
-	Cidr                        string                         `json:"cidr"`
-	Displaynetwork              bool                           `json:"displaynetwork"`
-	Displaytext                 string                         `json:"displaytext"`
-	Dns1                        string                         `json:"dns1"`
-	Dns2                        string                         `json:"dns2"`
-	Domain                      string                         `json:"domain"`
-	Domainid                    string                         `json:"domainid"`
-	Gateway                     string                         `json:"gateway"`
-	Id                          string                         `json:"id"`
-	Ip6cidr                     string                         `json:"ip6cidr"`
-	Ip6gateway                  string                         `json:"ip6gateway"`
-	Isdefault                   bool                           `json:"isdefault"`
-	Ispersistent                bool                           `json:"ispersistent"`
-	Issystem                    bool                           `json:"issystem"`
-	Name                        string                         `json:"name"`
-	Netmask                     string                         `json:"netmask"`
-	Networkcidr                 string                         `json:"networkcidr"`
-	Networkdomain               string                         `json:"networkdomain"`
-	Networkofferingavailability string                         `json:"networkofferingavailability"`
-	Networkofferingconservemode bool                           `json:"networkofferingconservemode"`
-	Networkofferingdisplaytext  string                         `json:"networkofferingdisplaytext"`
-	Networkofferingid           string                         `json:"networkofferingid"`
-	Networkofferingname         string                         `json:"networkofferingname"`
-	Physicalnetworkid           string                         `json:"physicalnetworkid"`
-	Project                     string                         `json:"project"`
-	Projectid                   string                         `json:"projectid"`
-	Related                     string                         `json:"related"`
-	Reservediprange             string                         `json:"reservediprange"`
-	Restartrequired             bool                           `json:"restartrequired"`
-	Service                     []F5LoadBalancerNetworkService `json:"service"`
-	Specifyipranges             bool                           `json:"specifyipranges"`
-	State                       string                         `json:"state"`
-	Strechedl2subnet            bool                           `json:"strechedl2subnet"`
-	Subdomainaccess             bool                           `json:"subdomainaccess"`
-	Tags                        []F5LoadBalancerNetworkTags    `json:"tags"`
-	Traffictype                 string                         `json:"traffictype"`
-	Type                        string                         `json:"type"`
-	Vlan                        string                         `json:"vlan"`
-	Vpcid                       string                         `json:"vpcid"`
-	Zoneid                      string                         `json:"zoneid"`
-	Zonename                    string                         `json:"zonename"`
-	Zonesnetworkspans           []interface{}                  `json:"zonesnetworkspans"`
-}
-
-type F5LoadBalancerNetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type F5LoadBalancerNetworkService struct {
-	Capability []F5LoadBalancerNetworkServiceCapability `json:"capability"`
-	Name       string                                   `json:"name"`
-	Provider   []F5LoadBalancerNetworkServiceProvider   `json:"provider"`
-}
-
-type F5LoadBalancerNetworkServiceCapability struct {
-	Canchooseservicecapability bool   `json:"canchooseservicecapability"`
-	Name                       string `json:"name"`
-	Value                      string `json:"value"`
-}
-
-type F5LoadBalancerNetworkServiceProvider struct {
-	Canenableindividualservice   bool     `json:"canenableindividualservice"`
-	Destinationphysicalnetworkid string   `json:"destinationphysicalnetworkid"`
-	Id                           string   `json:"id"`
-	Name                         string   `json:"name"`
-	Physicalnetworkid            string   `json:"physicalnetworkid"`
-	Servicelist                  []string `json:"servicelist"`
-	State                        string   `json:"state"`
 }
 
 type ListNetscalerLoadBalancerNetworksParams struct {
@@ -1930,6 +1747,7 @@ type NetscalerLoadBalancerNetwork struct {
 	Dns2                        string                                `json:"dns2"`
 	Domain                      string                                `json:"domain"`
 	Domainid                    string                                `json:"domainid"`
+	Externalid                  string                                `json:"externalid"`
 	Gateway                     string                                `json:"gateway"`
 	Id                          string                                `json:"id"`
 	Ip6cidr                     string                                `json:"ip6cidr"`
@@ -1937,6 +1755,8 @@ type NetscalerLoadBalancerNetwork struct {
 	Isdefault                   bool                                  `json:"isdefault"`
 	Ispersistent                bool                                  `json:"ispersistent"`
 	Issystem                    bool                                  `json:"issystem"`
+	JobID                       string                                `json:"jobid"`
+	Jobstatus                   int                                   `json:"jobstatus"`
 	Name                        string                                `json:"name"`
 	Netmask                     string                                `json:"netmask"`
 	Networkcidr                 string                                `json:"networkcidr"`
@@ -1949,6 +1769,7 @@ type NetscalerLoadBalancerNetwork struct {
 	Physicalnetworkid           string                                `json:"physicalnetworkid"`
 	Project                     string                                `json:"project"`
 	Projectid                   string                                `json:"projectid"`
+	Redundantrouter             bool                                  `json:"redundantrouter"`
 	Related                     string                                `json:"related"`
 	Reservediprange             string                                `json:"reservediprange"`
 	Restartrequired             bool                                  `json:"restartrequired"`
@@ -1957,7 +1778,7 @@ type NetscalerLoadBalancerNetwork struct {
 	State                       string                                `json:"state"`
 	Strechedl2subnet            bool                                  `json:"strechedl2subnet"`
 	Subdomainaccess             bool                                  `json:"subdomainaccess"`
-	Tags                        []NetscalerLoadBalancerNetworkTags    `json:"tags"`
+	Tags                        []Tags                                `json:"tags"`
 	Traffictype                 string                                `json:"traffictype"`
 	Type                        string                                `json:"type"`
 	Vlan                        string                                `json:"vlan"`
@@ -1965,19 +1786,6 @@ type NetscalerLoadBalancerNetwork struct {
 	Zoneid                      string                                `json:"zoneid"`
 	Zonename                    string                                `json:"zonename"`
 	Zonesnetworkspans           []interface{}                         `json:"zonesnetworkspans"`
-}
-
-type NetscalerLoadBalancerNetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type NetscalerLoadBalancerNetworkService struct {
@@ -2078,7 +1886,9 @@ type ListNetworkIsolationMethodsResponse struct {
 }
 
 type NetworkIsolationMethod struct {
-	Name string `json:"name"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
+	Name      string `json:"name"`
 }
 
 type ListNetworkServiceProvidersParams struct {
@@ -2229,6 +2039,8 @@ type NetworkServiceProvider struct {
 	Canenableindividualservice   bool     `json:"canenableindividualservice"`
 	Destinationphysicalnetworkid string   `json:"destinationphysicalnetworkid"`
 	Id                           string   `json:"id"`
+	JobID                        string   `json:"jobid"`
+	Jobstatus                    int      `json:"jobstatus"`
 	Name                         string   `json:"name"`
 	Physicalnetworkid            string   `json:"physicalnetworkid"`
 	Servicelist                  []string `json:"servicelist"`
@@ -2641,6 +2453,7 @@ type Network struct {
 	Dns2                        string                   `json:"dns2"`
 	Domain                      string                   `json:"domain"`
 	Domainid                    string                   `json:"domainid"`
+	Externalid                  string                   `json:"externalid"`
 	Gateway                     string                   `json:"gateway"`
 	Id                          string                   `json:"id"`
 	Ip6cidr                     string                   `json:"ip6cidr"`
@@ -2648,6 +2461,8 @@ type Network struct {
 	Isdefault                   bool                     `json:"isdefault"`
 	Ispersistent                bool                     `json:"ispersistent"`
 	Issystem                    bool                     `json:"issystem"`
+	JobID                       string                   `json:"jobid"`
+	Jobstatus                   int                      `json:"jobstatus"`
 	Name                        string                   `json:"name"`
 	Netmask                     string                   `json:"netmask"`
 	Networkcidr                 string                   `json:"networkcidr"`
@@ -2660,6 +2475,7 @@ type Network struct {
 	Physicalnetworkid           string                   `json:"physicalnetworkid"`
 	Project                     string                   `json:"project"`
 	Projectid                   string                   `json:"projectid"`
+	Redundantrouter             bool                     `json:"redundantrouter"`
 	Related                     string                   `json:"related"`
 	Reservediprange             string                   `json:"reservediprange"`
 	Restartrequired             bool                     `json:"restartrequired"`
@@ -2668,7 +2484,7 @@ type Network struct {
 	State                       string                   `json:"state"`
 	Strechedl2subnet            bool                     `json:"strechedl2subnet"`
 	Subdomainaccess             bool                     `json:"subdomainaccess"`
-	Tags                        []NetworkTags            `json:"tags"`
+	Tags                        []Tags                   `json:"tags"`
 	Traffictype                 string                   `json:"traffictype"`
 	Type                        string                   `json:"type"`
 	Vlan                        string                   `json:"vlan"`
@@ -2676,19 +2492,6 @@ type Network struct {
 	Zoneid                      string                   `json:"zoneid"`
 	Zonename                    string                   `json:"zonename"`
 	Zonesnetworkspans           []interface{}            `json:"zonesnetworkspans"`
-}
-
-type NetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type NetworkServiceInternal struct {
@@ -2851,6 +2654,7 @@ type NiciraNvpDeviceNetwork struct {
 	Dns2                        string                          `json:"dns2"`
 	Domain                      string                          `json:"domain"`
 	Domainid                    string                          `json:"domainid"`
+	Externalid                  string                          `json:"externalid"`
 	Gateway                     string                          `json:"gateway"`
 	Id                          string                          `json:"id"`
 	Ip6cidr                     string                          `json:"ip6cidr"`
@@ -2858,6 +2662,8 @@ type NiciraNvpDeviceNetwork struct {
 	Isdefault                   bool                            `json:"isdefault"`
 	Ispersistent                bool                            `json:"ispersistent"`
 	Issystem                    bool                            `json:"issystem"`
+	JobID                       string                          `json:"jobid"`
+	Jobstatus                   int                             `json:"jobstatus"`
 	Name                        string                          `json:"name"`
 	Netmask                     string                          `json:"netmask"`
 	Networkcidr                 string                          `json:"networkcidr"`
@@ -2870,6 +2676,7 @@ type NiciraNvpDeviceNetwork struct {
 	Physicalnetworkid           string                          `json:"physicalnetworkid"`
 	Project                     string                          `json:"project"`
 	Projectid                   string                          `json:"projectid"`
+	Redundantrouter             bool                            `json:"redundantrouter"`
 	Related                     string                          `json:"related"`
 	Reservediprange             string                          `json:"reservediprange"`
 	Restartrequired             bool                            `json:"restartrequired"`
@@ -2878,7 +2685,7 @@ type NiciraNvpDeviceNetwork struct {
 	State                       string                          `json:"state"`
 	Strechedl2subnet            bool                            `json:"strechedl2subnet"`
 	Subdomainaccess             bool                            `json:"subdomainaccess"`
-	Tags                        []NiciraNvpDeviceNetworkTags    `json:"tags"`
+	Tags                        []Tags                          `json:"tags"`
 	Traffictype                 string                          `json:"traffictype"`
 	Type                        string                          `json:"type"`
 	Vlan                        string                          `json:"vlan"`
@@ -2886,19 +2693,6 @@ type NiciraNvpDeviceNetwork struct {
 	Zoneid                      string                          `json:"zoneid"`
 	Zonename                    string                          `json:"zonename"`
 	Zonesnetworkspans           []interface{}                   `json:"zonesnetworkspans"`
-}
-
-type NiciraNvpDeviceNetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type NiciraNvpDeviceNetworkService struct {
@@ -3020,6 +2814,8 @@ type ListOpenDaylightControllersResponse struct {
 
 type OpenDaylightController struct {
 	Id                string `json:"id"`
+	JobID             string `json:"jobid"`
+	Jobstatus         int    `json:"jobstatus"`
 	Name              string `json:"name"`
 	Physicalnetworkid string `json:"physicalnetworkid"`
 	Url               string `json:"url"`
@@ -3164,6 +2960,7 @@ type PaloAltoFirewallNetwork struct {
 	Dns2                        string                           `json:"dns2"`
 	Domain                      string                           `json:"domain"`
 	Domainid                    string                           `json:"domainid"`
+	Externalid                  string                           `json:"externalid"`
 	Gateway                     string                           `json:"gateway"`
 	Id                          string                           `json:"id"`
 	Ip6cidr                     string                           `json:"ip6cidr"`
@@ -3171,6 +2968,8 @@ type PaloAltoFirewallNetwork struct {
 	Isdefault                   bool                             `json:"isdefault"`
 	Ispersistent                bool                             `json:"ispersistent"`
 	Issystem                    bool                             `json:"issystem"`
+	JobID                       string                           `json:"jobid"`
+	Jobstatus                   int                              `json:"jobstatus"`
 	Name                        string                           `json:"name"`
 	Netmask                     string                           `json:"netmask"`
 	Networkcidr                 string                           `json:"networkcidr"`
@@ -3183,6 +2982,7 @@ type PaloAltoFirewallNetwork struct {
 	Physicalnetworkid           string                           `json:"physicalnetworkid"`
 	Project                     string                           `json:"project"`
 	Projectid                   string                           `json:"projectid"`
+	Redundantrouter             bool                             `json:"redundantrouter"`
 	Related                     string                           `json:"related"`
 	Reservediprange             string                           `json:"reservediprange"`
 	Restartrequired             bool                             `json:"restartrequired"`
@@ -3191,7 +2991,7 @@ type PaloAltoFirewallNetwork struct {
 	State                       string                           `json:"state"`
 	Strechedl2subnet            bool                             `json:"strechedl2subnet"`
 	Subdomainaccess             bool                             `json:"subdomainaccess"`
-	Tags                        []PaloAltoFirewallNetworkTags    `json:"tags"`
+	Tags                        []Tags                           `json:"tags"`
 	Traffictype                 string                           `json:"traffictype"`
 	Type                        string                           `json:"type"`
 	Vlan                        string                           `json:"vlan"`
@@ -3199,19 +2999,6 @@ type PaloAltoFirewallNetwork struct {
 	Zoneid                      string                           `json:"zoneid"`
 	Zonename                    string                           `json:"zonename"`
 	Zonesnetworkspans           []interface{}                    `json:"zonesnetworkspans"`
-}
-
-type PaloAltoFirewallNetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type PaloAltoFirewallNetworkService struct {
@@ -3432,222 +3219,14 @@ type PhysicalNetwork struct {
 	Domainid             string `json:"domainid"`
 	Id                   string `json:"id"`
 	Isolationmethods     string `json:"isolationmethods"`
+	JobID                string `json:"jobid"`
+	Jobstatus            int    `json:"jobstatus"`
 	Name                 string `json:"name"`
 	Networkspeed         string `json:"networkspeed"`
 	State                string `json:"state"`
 	Tags                 string `json:"tags"`
 	Vlan                 string `json:"vlan"`
 	Zoneid               string `json:"zoneid"`
-}
-
-type ListSrxFirewallNetworksParams struct {
-	p map[string]interface{}
-}
-
-func (p *ListSrxFirewallNetworksParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["keyword"]; found {
-		u.Set("keyword", v.(string))
-	}
-	if v, found := p.p["lbdeviceid"]; found {
-		u.Set("lbdeviceid", v.(string))
-	}
-	if v, found := p.p["page"]; found {
-		vv := strconv.Itoa(v.(int))
-		u.Set("page", vv)
-	}
-	if v, found := p.p["pagesize"]; found {
-		vv := strconv.Itoa(v.(int))
-		u.Set("pagesize", vv)
-	}
-	return u
-}
-
-func (p *ListSrxFirewallNetworksParams) SetKeyword(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["keyword"] = v
-	return
-}
-
-func (p *ListSrxFirewallNetworksParams) SetLbdeviceid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["lbdeviceid"] = v
-	return
-}
-
-func (p *ListSrxFirewallNetworksParams) SetPage(v int) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["page"] = v
-	return
-}
-
-func (p *ListSrxFirewallNetworksParams) SetPagesize(v int) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["pagesize"] = v
-	return
-}
-
-// You should always use this function to get a new ListSrxFirewallNetworksParams instance,
-// as then you are sure you have configured all required params
-func (s *NetworkService) NewListSrxFirewallNetworksParams(lbdeviceid string) *ListSrxFirewallNetworksParams {
-	p := &ListSrxFirewallNetworksParams{}
-	p.p = make(map[string]interface{})
-	p.p["lbdeviceid"] = lbdeviceid
-	return p
-}
-
-// This is a courtesy helper function, which in some cases may not work as expected!
-func (s *NetworkService) GetSrxFirewallNetworkID(keyword string, lbdeviceid string, opts ...OptionFunc) (string, int, error) {
-	p := &ListSrxFirewallNetworksParams{}
-	p.p = make(map[string]interface{})
-
-	p.p["keyword"] = keyword
-	p.p["lbdeviceid"] = lbdeviceid
-
-	for _, fn := range append(s.cs.options, opts...) {
-		if err := fn(s.cs, p); err != nil {
-			return "", -1, err
-		}
-	}
-
-	l, err := s.ListSrxFirewallNetworks(p)
-	if err != nil {
-		return "", -1, err
-	}
-
-	if l.Count == 0 {
-		return "", l.Count, fmt.Errorf("No match found for %s: %+v", keyword, l)
-	}
-
-	if l.Count == 1 {
-		return l.SrxFirewallNetworks[0].Id, l.Count, nil
-	}
-
-	if l.Count > 1 {
-		for _, v := range l.SrxFirewallNetworks {
-			if v.Name == keyword {
-				return v.Id, l.Count, nil
-			}
-		}
-	}
-	return "", l.Count, fmt.Errorf("Could not find an exact match for %s: %+v", keyword, l)
-}
-
-// lists network that are using SRX firewall device
-func (s *NetworkService) ListSrxFirewallNetworks(p *ListSrxFirewallNetworksParams) (*ListSrxFirewallNetworksResponse, error) {
-	resp, err := s.cs.newRequest("listSrxFirewallNetworks", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r ListSrxFirewallNetworksResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	return &r, nil
-}
-
-type ListSrxFirewallNetworksResponse struct {
-	Count               int                   `json:"count"`
-	SrxFirewallNetworks []*SrxFirewallNetwork `json:"srxfirewallnetwork"`
-}
-
-type SrxFirewallNetwork struct {
-	Account                     string                      `json:"account"`
-	Aclid                       string                      `json:"aclid"`
-	Acltype                     string                      `json:"acltype"`
-	Broadcastdomaintype         string                      `json:"broadcastdomaintype"`
-	Broadcasturi                string                      `json:"broadcasturi"`
-	Canusefordeploy             bool                        `json:"canusefordeploy"`
-	Cidr                        string                      `json:"cidr"`
-	Displaynetwork              bool                        `json:"displaynetwork"`
-	Displaytext                 string                      `json:"displaytext"`
-	Dns1                        string                      `json:"dns1"`
-	Dns2                        string                      `json:"dns2"`
-	Domain                      string                      `json:"domain"`
-	Domainid                    string                      `json:"domainid"`
-	Gateway                     string                      `json:"gateway"`
-	Id                          string                      `json:"id"`
-	Ip6cidr                     string                      `json:"ip6cidr"`
-	Ip6gateway                  string                      `json:"ip6gateway"`
-	Isdefault                   bool                        `json:"isdefault"`
-	Ispersistent                bool                        `json:"ispersistent"`
-	Issystem                    bool                        `json:"issystem"`
-	Name                        string                      `json:"name"`
-	Netmask                     string                      `json:"netmask"`
-	Networkcidr                 string                      `json:"networkcidr"`
-	Networkdomain               string                      `json:"networkdomain"`
-	Networkofferingavailability string                      `json:"networkofferingavailability"`
-	Networkofferingconservemode bool                        `json:"networkofferingconservemode"`
-	Networkofferingdisplaytext  string                      `json:"networkofferingdisplaytext"`
-	Networkofferingid           string                      `json:"networkofferingid"`
-	Networkofferingname         string                      `json:"networkofferingname"`
-	Physicalnetworkid           string                      `json:"physicalnetworkid"`
-	Project                     string                      `json:"project"`
-	Projectid                   string                      `json:"projectid"`
-	Related                     string                      `json:"related"`
-	Reservediprange             string                      `json:"reservediprange"`
-	Restartrequired             bool                        `json:"restartrequired"`
-	Service                     []SrxFirewallNetworkService `json:"service"`
-	Specifyipranges             bool                        `json:"specifyipranges"`
-	State                       string                      `json:"state"`
-	Strechedl2subnet            bool                        `json:"strechedl2subnet"`
-	Subdomainaccess             bool                        `json:"subdomainaccess"`
-	Tags                        []SrxFirewallNetworkTags    `json:"tags"`
-	Traffictype                 string                      `json:"traffictype"`
-	Type                        string                      `json:"type"`
-	Vlan                        string                      `json:"vlan"`
-	Vpcid                       string                      `json:"vpcid"`
-	Zoneid                      string                      `json:"zoneid"`
-	Zonename                    string                      `json:"zonename"`
-	Zonesnetworkspans           []interface{}               `json:"zonesnetworkspans"`
-}
-
-type SrxFirewallNetworkService struct {
-	Capability []SrxFirewallNetworkServiceCapability `json:"capability"`
-	Name       string                                `json:"name"`
-	Provider   []SrxFirewallNetworkServiceProvider   `json:"provider"`
-}
-
-type SrxFirewallNetworkServiceCapability struct {
-	Canchooseservicecapability bool   `json:"canchooseservicecapability"`
-	Name                       string `json:"name"`
-	Value                      string `json:"value"`
-}
-
-type SrxFirewallNetworkServiceProvider struct {
-	Canenableindividualservice   bool     `json:"canenableindividualservice"`
-	Destinationphysicalnetworkid string   `json:"destinationphysicalnetworkid"`
-	Id                           string   `json:"id"`
-	Name                         string   `json:"name"`
-	Physicalnetworkid            string   `json:"physicalnetworkid"`
-	Servicelist                  []string `json:"servicelist"`
-	State                        string   `json:"state"`
-}
-
-type SrxFirewallNetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type ListStorageNetworkIpRangeParams struct {
@@ -3795,6 +3374,8 @@ type StorageNetworkIpRange struct {
 	Endip     string `json:"endip"`
 	Gateway   string `json:"gateway"`
 	Id        string `json:"id"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
 	Netmask   string `json:"netmask"`
 	Networkid string `json:"networkid"`
 	Podid     string `json:"podid"`
@@ -3902,6 +3483,8 @@ type ListSupportedNetworkServicesResponse struct {
 
 type SupportedNetworkService struct {
 	Capability []SupportedNetworkServiceCapability `json:"capability"`
+	JobID      string                              `json:"jobid"`
+	Jobstatus  int                                 `json:"jobstatus"`
 	Name       string                              `json:"name"`
 	Provider   []SupportedNetworkServiceProvider   `json:"provider"`
 }
@@ -3971,6 +3554,8 @@ func (s *NetworkService) ReleasePublicIpRange(p *ReleasePublicIpRangeParams) (*R
 
 type ReleasePublicIpRangeResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -3983,6 +3568,14 @@ func (r *ReleasePublicIpRangeResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err
@@ -4009,6 +3602,10 @@ func (p *RestartNetworkParams) toURLValues() url.Values {
 	if v, found := p.p["id"]; found {
 		u.Set("id", v.(string))
 	}
+	if v, found := p.p["makeredundant"]; found {
+		vv := strconv.FormatBool(v.(bool))
+		u.Set("makeredundant", vv)
+	}
 	return u
 }
 
@@ -4025,6 +3622,14 @@ func (p *RestartNetworkParams) SetId(v string) {
 		p.p = make(map[string]interface{})
 	}
 	p.p["id"] = v
+	return
+}
+
+func (p *RestartNetworkParams) SetMakeredundant(v bool) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["makeredundant"] = v
 	return
 }
 
@@ -4073,50 +3678,38 @@ func (s *NetworkService) RestartNetwork(p *RestartNetworkParams) (*RestartNetwor
 }
 
 type RestartNetworkResponse struct {
-	JobID                     string                       `json:"jobid"`
-	Account                   string                       `json:"account"`
-	Allocated                 string                       `json:"allocated"`
-	Associatednetworkid       string                       `json:"associatednetworkid"`
-	Associatednetworkname     string                       `json:"associatednetworkname"`
-	Domain                    string                       `json:"domain"`
-	Domainid                  string                       `json:"domainid"`
-	Fordisplay                bool                         `json:"fordisplay"`
-	Forvirtualnetwork         bool                         `json:"forvirtualnetwork"`
-	Id                        string                       `json:"id"`
-	Ipaddress                 string                       `json:"ipaddress"`
-	Isportable                bool                         `json:"isportable"`
-	Issourcenat               bool                         `json:"issourcenat"`
-	Isstaticnat               bool                         `json:"isstaticnat"`
-	Issystem                  bool                         `json:"issystem"`
-	Networkid                 string                       `json:"networkid"`
-	Physicalnetworkid         string                       `json:"physicalnetworkid"`
-	Project                   string                       `json:"project"`
-	Projectid                 string                       `json:"projectid"`
-	Purpose                   string                       `json:"purpose"`
-	State                     string                       `json:"state"`
-	Tags                      []RestartNetworkResponseTags `json:"tags"`
-	Virtualmachinedisplayname string                       `json:"virtualmachinedisplayname"`
-	Virtualmachineid          string                       `json:"virtualmachineid"`
-	Virtualmachinename        string                       `json:"virtualmachinename"`
-	Vlanid                    string                       `json:"vlanid"`
-	Vlanname                  string                       `json:"vlanname"`
-	Vmipaddress               string                       `json:"vmipaddress"`
-	Vpcid                     string                       `json:"vpcid"`
-	Zoneid                    string                       `json:"zoneid"`
-	Zonename                  string                       `json:"zonename"`
-}
-
-type RestartNetworkResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	Account                   string `json:"account"`
+	Allocated                 string `json:"allocated"`
+	Associatednetworkid       string `json:"associatednetworkid"`
+	Associatednetworkname     string `json:"associatednetworkname"`
+	Domain                    string `json:"domain"`
+	Domainid                  string `json:"domainid"`
+	Fordisplay                bool   `json:"fordisplay"`
+	Forvirtualnetwork         bool   `json:"forvirtualnetwork"`
+	Id                        string `json:"id"`
+	Ipaddress                 string `json:"ipaddress"`
+	Isportable                bool   `json:"isportable"`
+	Issourcenat               bool   `json:"issourcenat"`
+	Isstaticnat               bool   `json:"isstaticnat"`
+	Issystem                  bool   `json:"issystem"`
+	JobID                     string `json:"jobid"`
+	Jobstatus                 int    `json:"jobstatus"`
+	Networkid                 string `json:"networkid"`
+	Physicalnetworkid         string `json:"physicalnetworkid"`
+	Project                   string `json:"project"`
+	Projectid                 string `json:"projectid"`
+	Purpose                   string `json:"purpose"`
+	State                     string `json:"state"`
+	Tags                      []Tags `json:"tags"`
+	Virtualmachinedisplayname string `json:"virtualmachinedisplayname"`
+	Virtualmachineid          string `json:"virtualmachineid"`
+	Virtualmachinename        string `json:"virtualmachinename"`
+	Vlanid                    string `json:"vlanid"`
+	Vlanname                  string `json:"vlanname"`
+	Vmipaddress               string `json:"vmipaddress"`
+	Vpcid                     string `json:"vpcid"`
+	Zoneid                    string `json:"zoneid"`
+	Zonename                  string `json:"zonename"`
 }
 
 type UpdateNetworkParams struct {
@@ -4142,6 +3735,10 @@ func (p *UpdateNetworkParams) toURLValues() url.Values {
 	if v, found := p.p["displaytext"]; found {
 		u.Set("displaytext", v.(string))
 	}
+	if v, found := p.p["forced"]; found {
+		vv := strconv.FormatBool(v.(bool))
+		u.Set("forced", vv)
+	}
 	if v, found := p.p["guestvmcidr"]; found {
 		u.Set("guestvmcidr", v.(string))
 	}
@@ -4156,6 +3753,10 @@ func (p *UpdateNetworkParams) toURLValues() url.Values {
 	}
 	if v, found := p.p["networkofferingid"]; found {
 		u.Set("networkofferingid", v.(string))
+	}
+	if v, found := p.p["updateinsequence"]; found {
+		vv := strconv.FormatBool(v.(bool))
+		u.Set("updateinsequence", vv)
 	}
 	return u
 }
@@ -4189,6 +3790,14 @@ func (p *UpdateNetworkParams) SetDisplaytext(v string) {
 		p.p = make(map[string]interface{})
 	}
 	p.p["displaytext"] = v
+	return
+}
+
+func (p *UpdateNetworkParams) SetForced(v bool) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["forced"] = v
 	return
 }
 
@@ -4229,6 +3838,14 @@ func (p *UpdateNetworkParams) SetNetworkofferingid(v string) {
 		p.p = make(map[string]interface{})
 	}
 	p.p["networkofferingid"] = v
+	return
+}
+
+func (p *UpdateNetworkParams) SetUpdateinsequence(v bool) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["updateinsequence"] = v
 	return
 }
 
@@ -4277,7 +3894,6 @@ func (s *NetworkService) UpdateNetwork(p *UpdateNetworkParams) (*UpdateNetworkRe
 }
 
 type UpdateNetworkResponse struct {
-	JobID                       string                         `json:"jobid"`
 	Account                     string                         `json:"account"`
 	Aclid                       string                         `json:"aclid"`
 	Acltype                     string                         `json:"acltype"`
@@ -4291,6 +3907,7 @@ type UpdateNetworkResponse struct {
 	Dns2                        string                         `json:"dns2"`
 	Domain                      string                         `json:"domain"`
 	Domainid                    string                         `json:"domainid"`
+	Externalid                  string                         `json:"externalid"`
 	Gateway                     string                         `json:"gateway"`
 	Id                          string                         `json:"id"`
 	Ip6cidr                     string                         `json:"ip6cidr"`
@@ -4298,6 +3915,8 @@ type UpdateNetworkResponse struct {
 	Isdefault                   bool                           `json:"isdefault"`
 	Ispersistent                bool                           `json:"ispersistent"`
 	Issystem                    bool                           `json:"issystem"`
+	JobID                       string                         `json:"jobid"`
+	Jobstatus                   int                            `json:"jobstatus"`
 	Name                        string                         `json:"name"`
 	Netmask                     string                         `json:"netmask"`
 	Networkcidr                 string                         `json:"networkcidr"`
@@ -4310,6 +3929,7 @@ type UpdateNetworkResponse struct {
 	Physicalnetworkid           string                         `json:"physicalnetworkid"`
 	Project                     string                         `json:"project"`
 	Projectid                   string                         `json:"projectid"`
+	Redundantrouter             bool                           `json:"redundantrouter"`
 	Related                     string                         `json:"related"`
 	Reservediprange             string                         `json:"reservediprange"`
 	Restartrequired             bool                           `json:"restartrequired"`
@@ -4318,7 +3938,7 @@ type UpdateNetworkResponse struct {
 	State                       string                         `json:"state"`
 	Strechedl2subnet            bool                           `json:"strechedl2subnet"`
 	Subdomainaccess             bool                           `json:"subdomainaccess"`
-	Tags                        []UpdateNetworkResponseTags    `json:"tags"`
+	Tags                        []Tags                         `json:"tags"`
 	Traffictype                 string                         `json:"traffictype"`
 	Type                        string                         `json:"type"`
 	Vlan                        string                         `json:"vlan"`
@@ -4326,19 +3946,6 @@ type UpdateNetworkResponse struct {
 	Zoneid                      string                         `json:"zoneid"`
 	Zonename                    string                         `json:"zonename"`
 	Zonesnetworkspans           []interface{}                  `json:"zonesnetworkspans"`
-}
-
-type UpdateNetworkResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type UpdateNetworkResponseService struct {
@@ -4454,10 +4061,11 @@ func (s *NetworkService) UpdateNetworkServiceProvider(p *UpdateNetworkServicePro
 }
 
 type UpdateNetworkServiceProviderResponse struct {
-	JobID                        string   `json:"jobid"`
 	Canenableindividualservice   bool     `json:"canenableindividualservice"`
 	Destinationphysicalnetworkid string   `json:"destinationphysicalnetworkid"`
 	Id                           string   `json:"id"`
+	JobID                        string   `json:"jobid"`
+	Jobstatus                    int      `json:"jobstatus"`
 	Name                         string   `json:"name"`
 	Physicalnetworkid            string   `json:"physicalnetworkid"`
 	Servicelist                  []string `json:"servicelist"`
@@ -4577,11 +4185,12 @@ func (s *NetworkService) UpdatePhysicalNetwork(p *UpdatePhysicalNetworkParams) (
 }
 
 type UpdatePhysicalNetworkResponse struct {
-	JobID                string `json:"jobid"`
 	Broadcastdomainrange string `json:"broadcastdomainrange"`
 	Domainid             string `json:"domainid"`
 	Id                   string `json:"id"`
 	Isolationmethods     string `json:"isolationmethods"`
+	JobID                string `json:"jobid"`
+	Jobstatus            int    `json:"jobstatus"`
 	Name                 string `json:"name"`
 	Networkspeed         string `json:"networkspeed"`
 	State                string `json:"state"`
@@ -4703,10 +4312,11 @@ func (s *NetworkService) UpdateStorageNetworkIpRange(p *UpdateStorageNetworkIpRa
 }
 
 type UpdateStorageNetworkIpRangeResponse struct {
-	JobID     string `json:"jobid"`
 	Endip     string `json:"endip"`
 	Gateway   string `json:"gateway"`
 	Id        string `json:"id"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
 	Netmask   string `json:"netmask"`
 	Networkid string `json:"networkid"`
 	Podid     string `json:"podid"`

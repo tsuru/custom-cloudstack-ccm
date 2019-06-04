@@ -116,10 +116,11 @@ func (s *VolumeService) AttachVolume(p *AttachVolumeParams) (*AttachVolumeRespon
 }
 
 type AttachVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -139,10 +140,15 @@ type AttachVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -157,11 +163,14 @@ type AttachVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -372,10 +381,11 @@ func (s *VolumeService) CreateVolume(p *CreateVolumeParams) (*CreateVolumeRespon
 }
 
 type CreateVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -395,10 +405,15 @@ type CreateVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -413,11 +428,14 @@ type CreateVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -474,6 +492,8 @@ func (s *VolumeService) DeleteVolume(p *DeleteVolumeParams) (*DeleteVolumeRespon
 
 type DeleteVolumeResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -486,6 +506,14 @@ func (r *DeleteVolumeResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err
@@ -586,10 +614,11 @@ func (s *VolumeService) DetachVolume(p *DetachVolumeParams) (*DetachVolumeRespon
 }
 
 type DetachVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -609,10 +638,15 @@ type DetachVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -627,11 +661,14 @@ type DetachVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -742,12 +779,13 @@ func (s *VolumeService) ExtractVolume(p *ExtractVolumeParams) (*ExtractVolumeRes
 }
 
 type ExtractVolumeResponse struct {
-	JobID            string `json:"jobid"`
 	Accountid        string `json:"accountid"`
 	Created          string `json:"created"`
 	ExtractId        string `json:"extractId"`
 	ExtractMode      string `json:"extractMode"`
 	Id               string `json:"id"`
+	JobID            string `json:"jobid"`
+	Jobstatus        int    `json:"jobstatus"`
 	Name             string `json:"name"`
 	Resultstring     string `json:"resultstring"`
 	State            string `json:"state"`
@@ -807,70 +845,9 @@ func (s *VolumeService) GetPathForVolume(p *GetPathForVolumeParams) (*GetPathFor
 }
 
 type GetPathForVolumeResponse struct {
-	Path string `json:"path"`
-}
-
-type GetSolidFireVolumeAccessGroupIdParams struct {
-	p map[string]interface{}
-}
-
-func (p *GetSolidFireVolumeAccessGroupIdParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["clusterid"]; found {
-		u.Set("clusterid", v.(string))
-	}
-	if v, found := p.p["storageid"]; found {
-		u.Set("storageid", v.(string))
-	}
-	return u
-}
-
-func (p *GetSolidFireVolumeAccessGroupIdParams) SetClusterid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["clusterid"] = v
-	return
-}
-
-func (p *GetSolidFireVolumeAccessGroupIdParams) SetStorageid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["storageid"] = v
-	return
-}
-
-// You should always use this function to get a new GetSolidFireVolumeAccessGroupIdParams instance,
-// as then you are sure you have configured all required params
-func (s *VolumeService) NewGetSolidFireVolumeAccessGroupIdParams(clusterid string, storageid string) *GetSolidFireVolumeAccessGroupIdParams {
-	p := &GetSolidFireVolumeAccessGroupIdParams{}
-	p.p = make(map[string]interface{})
-	p.p["clusterid"] = clusterid
-	p.p["storageid"] = storageid
-	return p
-}
-
-// Get the SF Volume Access Group ID
-func (s *VolumeService) GetSolidFireVolumeAccessGroupId(p *GetSolidFireVolumeAccessGroupIdParams) (*GetSolidFireVolumeAccessGroupIdResponse, error) {
-	resp, err := s.cs.newRequest("getSolidFireVolumeAccessGroupId", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r GetSolidFireVolumeAccessGroupIdResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	return &r, nil
-}
-
-type GetSolidFireVolumeAccessGroupIdResponse struct {
-	SolidFireVolumeAccessGroupId int64 `json:"solidFireVolumeAccessGroupId"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
+	Path      string `json:"path"`
 }
 
 type GetSolidFireVolumeSizeParams struct {
@@ -921,7 +898,9 @@ func (s *VolumeService) GetSolidFireVolumeSize(p *GetSolidFireVolumeSizeParams) 
 }
 
 type GetSolidFireVolumeSizeResponse struct {
-	SolidFireVolumeSize int64 `json:"solidFireVolumeSize"`
+	JobID               string `json:"jobid"`
+	Jobstatus           int    `json:"jobstatus"`
+	SolidFireVolumeSize int64  `json:"solidFireVolumeSize"`
 }
 
 type GetUploadParamsForVolumeParams struct {
@@ -1064,6 +1043,8 @@ func (s *VolumeService) GetUploadParamsForVolume(p *GetUploadParamsForVolumePara
 type GetUploadParamsForVolumeResponse struct {
 	Expires   string `json:"expires"`
 	Id        string `json:"id"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
 	Metadata  string `json:"metadata"`
 	PostURL   string `json:"postURL"`
 	Signature string `json:"signature"`
@@ -1117,6 +1098,8 @@ func (s *VolumeService) GetVolumeiScsiName(p *GetVolumeiScsiNameParams) (*GetVol
 }
 
 type GetVolumeiScsiNameResponse struct {
+	JobID           string `json:"jobid"`
+	Jobstatus       int    `json:"jobstatus"`
 	VolumeiScsiName string `json:"volumeiScsiName"`
 }
 
@@ -1131,6 +1114,9 @@ func (p *ListVolumesParams) toURLValues() url.Values {
 	}
 	if v, found := p.p["account"]; found {
 		u.Set("account", v.(string))
+	}
+	if v, found := p.p["clusterid"]; found {
+		u.Set("clusterid", v.(string))
 	}
 	if v, found := p.p["diskofferingid"]; found {
 		u.Set("diskofferingid", v.(string))
@@ -1208,6 +1194,14 @@ func (p *ListVolumesParams) SetAccount(v string) {
 		p.p = make(map[string]interface{})
 	}
 	p.p["account"] = v
+	return
+}
+
+func (p *ListVolumesParams) SetClusterid(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["clusterid"] = v
 	return
 }
 
@@ -1478,6 +1472,8 @@ type Volume struct {
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -1497,10 +1493,15 @@ type Volume struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -1515,11 +1516,14 @@ type Volume struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -1540,6 +1544,9 @@ func (p *MigrateVolumeParams) toURLValues() url.Values {
 		vv := strconv.FormatBool(v.(bool))
 		u.Set("livemigrate", vv)
 	}
+	if v, found := p.p["newdiskofferingid"]; found {
+		u.Set("newdiskofferingid", v.(string))
+	}
 	if v, found := p.p["storageid"]; found {
 		u.Set("storageid", v.(string))
 	}
@@ -1554,6 +1561,14 @@ func (p *MigrateVolumeParams) SetLivemigrate(v bool) {
 		p.p = make(map[string]interface{})
 	}
 	p.p["livemigrate"] = v
+	return
+}
+
+func (p *MigrateVolumeParams) SetNewdiskofferingid(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["newdiskofferingid"] = v
 	return
 }
 
@@ -1619,10 +1634,11 @@ func (s *VolumeService) MigrateVolume(p *MigrateVolumeParams) (*MigrateVolumeRes
 }
 
 type MigrateVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -1642,10 +1658,15 @@ type MigrateVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -1660,11 +1681,14 @@ type MigrateVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -1799,10 +1823,11 @@ func (s *VolumeService) ResizeVolume(p *ResizeVolumeParams) (*ResizeVolumeRespon
 }
 
 type ResizeVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -1822,10 +1847,15 @@ type ResizeVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -1840,11 +1870,14 @@ type ResizeVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -1986,10 +2019,11 @@ func (s *VolumeService) UpdateVolume(p *UpdateVolumeParams) (*UpdateVolumeRespon
 }
 
 type UpdateVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -2009,10 +2043,15 @@ type UpdateVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -2027,11 +2066,14 @@ type UpdateVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`
@@ -2209,10 +2251,11 @@ func (s *VolumeService) UploadVolume(p *UploadVolumeParams) (*UploadVolumeRespon
 }
 
 type UploadVolumeResponse struct {
-	JobID                      string `json:"jobid"`
 	Account                    string `json:"account"`
 	Attached                   string `json:"attached"`
 	Chaininfo                  string `json:"chaininfo"`
+	Clusterid                  string `json:"clusterid"`
+	Clustername                string `json:"clustername"`
 	Created                    string `json:"created"`
 	Destroyed                  bool   `json:"destroyed"`
 	Deviceid                   int64  `json:"deviceid"`
@@ -2232,10 +2275,15 @@ type UploadVolumeResponse struct {
 	Isodisplaytext             string `json:"isodisplaytext"`
 	Isoid                      string `json:"isoid"`
 	Isoname                    string `json:"isoname"`
+	JobID                      string `json:"jobid"`
+	Jobstatus                  int    `json:"jobstatus"`
 	Maxiops                    int64  `json:"maxiops"`
 	Miniops                    int64  `json:"miniops"`
 	Name                       string `json:"name"`
 	Path                       string `json:"path"`
+	Physicalsize               int64  `json:"physicalsize"`
+	Podid                      string `json:"podid"`
+	Podname                    string `json:"podname"`
 	Project                    string `json:"project"`
 	Projectid                  string `json:"projectid"`
 	Provisioningtype           string `json:"provisioningtype"`
@@ -2250,11 +2298,14 @@ type UploadVolumeResponse struct {
 	Storage                    string `json:"storage"`
 	Storageid                  string `json:"storageid"`
 	Storagetype                string `json:"storagetype"`
+	Tags                       []Tags `json:"tags"`
 	Templatedisplaytext        string `json:"templatedisplaytext"`
 	Templateid                 string `json:"templateid"`
 	Templatename               string `json:"templatename"`
 	Type                       string `json:"type"`
+	Utilization                string `json:"utilization"`
 	Virtualmachineid           string `json:"virtualmachineid"`
+	Virtualsize                int64  `json:"virtualsize"`
 	Vmdisplayname              string `json:"vmdisplayname"`
 	Vmname                     string `json:"vmname"`
 	Vmstate                    string `json:"vmstate"`

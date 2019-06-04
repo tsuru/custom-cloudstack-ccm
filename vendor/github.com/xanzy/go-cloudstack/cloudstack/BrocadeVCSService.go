@@ -127,9 +127,10 @@ func (s *BrocadeVCSService) AddBrocadeVcsDevice(p *AddBrocadeVcsDeviceParams) (*
 }
 
 type AddBrocadeVcsDeviceResponse struct {
-	JobID             string `json:"jobid"`
 	Brocadedevicename string `json:"brocadedevicename"`
 	Hostname          string `json:"hostname"`
+	JobID             string `json:"jobid"`
+	Jobstatus         int    `json:"jobstatus"`
 	Physicalnetworkid string `json:"physicalnetworkid"`
 	Provider          string `json:"provider"`
 	Vcsdeviceid       string `json:"vcsdeviceid"`
@@ -198,8 +199,9 @@ func (s *BrocadeVCSService) DeleteBrocadeVcsDevice(p *DeleteBrocadeVcsDevicePara
 }
 
 type DeleteBrocadeVcsDeviceResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -341,6 +343,7 @@ type BrocadeVcsDeviceNetwork struct {
 	Dns2                        string                           `json:"dns2"`
 	Domain                      string                           `json:"domain"`
 	Domainid                    string                           `json:"domainid"`
+	Externalid                  string                           `json:"externalid"`
 	Gateway                     string                           `json:"gateway"`
 	Id                          string                           `json:"id"`
 	Ip6cidr                     string                           `json:"ip6cidr"`
@@ -348,6 +351,8 @@ type BrocadeVcsDeviceNetwork struct {
 	Isdefault                   bool                             `json:"isdefault"`
 	Ispersistent                bool                             `json:"ispersistent"`
 	Issystem                    bool                             `json:"issystem"`
+	JobID                       string                           `json:"jobid"`
+	Jobstatus                   int                              `json:"jobstatus"`
 	Name                        string                           `json:"name"`
 	Netmask                     string                           `json:"netmask"`
 	Networkcidr                 string                           `json:"networkcidr"`
@@ -360,6 +365,7 @@ type BrocadeVcsDeviceNetwork struct {
 	Physicalnetworkid           string                           `json:"physicalnetworkid"`
 	Project                     string                           `json:"project"`
 	Projectid                   string                           `json:"projectid"`
+	Redundantrouter             bool                             `json:"redundantrouter"`
 	Related                     string                           `json:"related"`
 	Reservediprange             string                           `json:"reservediprange"`
 	Restartrequired             bool                             `json:"restartrequired"`
@@ -368,7 +374,7 @@ type BrocadeVcsDeviceNetwork struct {
 	State                       string                           `json:"state"`
 	Strechedl2subnet            bool                             `json:"strechedl2subnet"`
 	Subdomainaccess             bool                             `json:"subdomainaccess"`
-	Tags                        []BrocadeVcsDeviceNetworkTags    `json:"tags"`
+	Tags                        []Tags                           `json:"tags"`
 	Traffictype                 string                           `json:"traffictype"`
 	Type                        string                           `json:"type"`
 	Vlan                        string                           `json:"vlan"`
@@ -378,29 +384,10 @@ type BrocadeVcsDeviceNetwork struct {
 	Zonesnetworkspans           []interface{}                    `json:"zonesnetworkspans"`
 }
 
-type BrocadeVcsDeviceNetworkTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
 type BrocadeVcsDeviceNetworkService struct {
 	Capability []BrocadeVcsDeviceNetworkServiceCapability `json:"capability"`
 	Name       string                                     `json:"name"`
 	Provider   []BrocadeVcsDeviceNetworkServiceProvider   `json:"provider"`
-}
-
-type BrocadeVcsDeviceNetworkServiceCapability struct {
-	Canchooseservicecapability bool   `json:"canchooseservicecapability"`
-	Name                       string `json:"name"`
-	Value                      string `json:"value"`
 }
 
 type BrocadeVcsDeviceNetworkServiceProvider struct {
@@ -411,6 +398,12 @@ type BrocadeVcsDeviceNetworkServiceProvider struct {
 	Physicalnetworkid            string   `json:"physicalnetworkid"`
 	Servicelist                  []string `json:"servicelist"`
 	State                        string   `json:"state"`
+}
+
+type BrocadeVcsDeviceNetworkServiceCapability struct {
+	Canchooseservicecapability bool   `json:"canchooseservicecapability"`
+	Name                       string `json:"name"`
+	Value                      string `json:"value"`
 }
 
 type ListBrocadeVcsDevicesParams struct {
@@ -513,6 +506,8 @@ type ListBrocadeVcsDevicesResponse struct {
 type BrocadeVcsDevice struct {
 	Brocadedevicename string `json:"brocadedevicename"`
 	Hostname          string `json:"hostname"`
+	JobID             string `json:"jobid"`
+	Jobstatus         int    `json:"jobstatus"`
 	Physicalnetworkid string `json:"physicalnetworkid"`
 	Provider          string `json:"provider"`
 	Vcsdeviceid       string `json:"vcsdeviceid"`

@@ -101,11 +101,16 @@ func (s *NicService) AddIpToNic(p *AddIpToNicParams) (*AddIpToNicResponse, error
 }
 
 type AddIpToNicResponse struct {
-	JobID            string `json:"jobid"`
-	Id               string `json:"id"`
-	Ipaddress        string `json:"ipaddress"`
-	Networkid        string `json:"networkid"`
-	Nicid            string `json:"nicid"`
+	Id          string `json:"id"`
+	Ipaddress   string `json:"ipaddress"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
+	Networkid   string `json:"networkid"`
+	Nicid       string `json:"nicid"`
+	Secondaryip []struct {
+		Id        string `json:"id"`
+		Ipaddress string `json:"ipaddress"`
+	} `json:"secondaryip"`
 	Virtualmachineid string `json:"virtualmachineid"`
 }
 
@@ -231,22 +236,25 @@ type ListNicsResponse struct {
 }
 
 type Nic struct {
-	Broadcasturi         string `json:"broadcasturi"`
-	Deviceid             string `json:"deviceid"`
-	Gateway              string `json:"gateway"`
-	Id                   string `json:"id"`
-	Ip6address           string `json:"ip6address"`
-	Ip6cidr              string `json:"ip6cidr"`
-	Ip6gateway           string `json:"ip6gateway"`
-	Ipaddress            string `json:"ipaddress"`
-	Isdefault            bool   `json:"isdefault"`
-	Isolationuri         string `json:"isolationuri"`
-	Macaddress           string `json:"macaddress"`
-	Netmask              string `json:"netmask"`
-	Networkid            string `json:"networkid"`
-	Networkname          string `json:"networkname"`
-	Nsxlogicalswitch     string `json:"nsxlogicalswitch"`
-	Nsxlogicalswitchport string `json:"nsxlogicalswitchport"`
+	Broadcasturi         string   `json:"broadcasturi"`
+	Deviceid             string   `json:"deviceid"`
+	Extradhcpoption      []string `json:"extradhcpoption"`
+	Gateway              string   `json:"gateway"`
+	Id                   string   `json:"id"`
+	Ip6address           string   `json:"ip6address"`
+	Ip6cidr              string   `json:"ip6cidr"`
+	Ip6gateway           string   `json:"ip6gateway"`
+	Ipaddress            string   `json:"ipaddress"`
+	Isdefault            bool     `json:"isdefault"`
+	Isolationuri         string   `json:"isolationuri"`
+	JobID                string   `json:"jobid"`
+	Jobstatus            int      `json:"jobstatus"`
+	Macaddress           string   `json:"macaddress"`
+	Netmask              string   `json:"netmask"`
+	Networkid            string   `json:"networkid"`
+	Networkname          string   `json:"networkname"`
+	Nsxlogicalswitch     string   `json:"nsxlogicalswitch"`
+	Nsxlogicalswitchport string   `json:"nsxlogicalswitchport"`
 	Secondaryip          []struct {
 		Id        string `json:"id"`
 		Ipaddress string `json:"ipaddress"`
@@ -319,8 +327,9 @@ func (s *NicService) RemoveIpFromNic(p *RemoveIpFromNicParams) (*RemoveIpFromNic
 }
 
 type RemoveIpFromNicResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -403,7 +412,6 @@ func (s *NicService) UpdateVmNicIp(p *UpdateVmNicIpParams) (*UpdateVmNicIpRespon
 }
 
 type UpdateVmNicIpResponse struct {
-	JobID                 string                               `json:"jobid"`
 	Account               string                               `json:"account"`
 	Affinitygroup         []UpdateVmNicIpResponseAffinitygroup `json:"affinitygroup"`
 	Cpunumber             int                                  `json:"cpunumber"`
@@ -435,6 +443,8 @@ type UpdateVmNicIpResponse struct {
 	Isodisplaytext        string                               `json:"isodisplaytext"`
 	Isoid                 string                               `json:"isoid"`
 	Isoname               string                               `json:"isoname"`
+	JobID                 string                               `json:"jobid"`
+	Jobstatus             int                                  `json:"jobstatus"`
 	Keypair               string                               `json:"keypair"`
 	Memory                int                                  `json:"memory"`
 	Memoryintfreekbs      int64                                `json:"memoryintfreekbs"`
@@ -443,8 +453,8 @@ type UpdateVmNicIpResponse struct {
 	Name                  string                               `json:"name"`
 	Networkkbsread        int64                                `json:"networkkbsread"`
 	Networkkbswrite       int64                                `json:"networkkbswrite"`
-	Nic                   []UpdateVmNicIpResponseNic           `json:"nic"`
-	Ostypeid              int64                                `json:"ostypeid"`
+	Nic                   []Nic                                `json:"nic"`
+	Ostypeid              string                               `json:"ostypeid"`
 	Password              string                               `json:"password"`
 	Passwordenabled       bool                                 `json:"passwordenabled"`
 	Project               string                               `json:"project"`
@@ -458,6 +468,7 @@ type UpdateVmNicIpResponse struct {
 	Serviceofferingname   string                               `json:"serviceofferingname"`
 	Servicestate          string                               `json:"servicestate"`
 	State                 string                               `json:"state"`
+	Tags                  []Tags                               `json:"tags"`
 	Templatedisplaytext   string                               `json:"templatedisplaytext"`
 	Templateid            string                               `json:"templateid"`
 	Templatename          string                               `json:"templatename"`
@@ -466,6 +477,35 @@ type UpdateVmNicIpResponse struct {
 	Vgpu                  string                               `json:"vgpu"`
 	Zoneid                string                               `json:"zoneid"`
 	Zonename              string                               `json:"zonename"`
+}
+
+type UpdateVmNicIpResponseSecuritygroup struct {
+	Account             string                                   `json:"account"`
+	Description         string                                   `json:"description"`
+	Domain              string                                   `json:"domain"`
+	Domainid            string                                   `json:"domainid"`
+	Egressrule          []UpdateVmNicIpResponseSecuritygroupRule `json:"egressrule"`
+	Id                  string                                   `json:"id"`
+	Ingressrule         []UpdateVmNicIpResponseSecuritygroupRule `json:"ingressrule"`
+	Name                string                                   `json:"name"`
+	Project             string                                   `json:"project"`
+	Projectid           string                                   `json:"projectid"`
+	Tags                []Tags                                   `json:"tags"`
+	Virtualmachinecount int                                      `json:"virtualmachinecount"`
+	Virtualmachineids   []interface{}                            `json:"virtualmachineids"`
+}
+
+type UpdateVmNicIpResponseSecuritygroupRule struct {
+	Account           string `json:"account"`
+	Cidr              string `json:"cidr"`
+	Endport           int    `json:"endport"`
+	Icmpcode          int    `json:"icmpcode"`
+	Icmptype          int    `json:"icmptype"`
+	Protocol          string `json:"protocol"`
+	Ruleid            string `json:"ruleid"`
+	Securitygroupname string `json:"securitygroupname"`
+	Startport         int    `json:"startport"`
+	Tags              []Tags `json:"tags"`
 }
 
 type UpdateVmNicIpResponseAffinitygroup struct {
@@ -481,109 +521,29 @@ type UpdateVmNicIpResponseAffinitygroup struct {
 	VirtualmachineIds []string `json:"virtualmachineIds"`
 }
 
-type UpdateVmNicIpResponseNic struct {
-	Broadcasturi         string `json:"broadcasturi"`
-	Deviceid             string `json:"deviceid"`
-	Gateway              string `json:"gateway"`
-	Id                   string `json:"id"`
-	Ip6address           string `json:"ip6address"`
-	Ip6cidr              string `json:"ip6cidr"`
-	Ip6gateway           string `json:"ip6gateway"`
-	Ipaddress            string `json:"ipaddress"`
-	Isdefault            bool   `json:"isdefault"`
-	Isolationuri         string `json:"isolationuri"`
-	Macaddress           string `json:"macaddress"`
-	Netmask              string `json:"netmask"`
-	Networkid            string `json:"networkid"`
-	Networkname          string `json:"networkname"`
-	Nsxlogicalswitch     string `json:"nsxlogicalswitch"`
-	Nsxlogicalswitchport string `json:"nsxlogicalswitchport"`
-	Secondaryip          []struct {
-		Id        string `json:"id"`
-		Ipaddress string `json:"ipaddress"`
-	} `json:"secondaryip"`
-	Traffictype      string `json:"traffictype"`
-	Type             string `json:"type"`
-	Virtualmachineid string `json:"virtualmachineid"`
-}
+func (r *UpdateVmNicIpResponse) UnmarshalJSON(b []byte) error {
+	var m map[string]interface{}
+	err := json.Unmarshal(b, &m)
+	if err != nil {
+		return err
+	}
 
-type UpdateVmNicIpResponseSecuritygroup struct {
-	Account             string                                          `json:"account"`
-	Description         string                                          `json:"description"`
-	Domain              string                                          `json:"domain"`
-	Domainid            string                                          `json:"domainid"`
-	Egressrule          []UpdateVmNicIpResponseSecuritygroupEgressrule  `json:"egressrule"`
-	Id                  string                                          `json:"id"`
-	Ingressrule         []UpdateVmNicIpResponseSecuritygroupIngressrule `json:"ingressrule"`
-	Name                string                                          `json:"name"`
-	Project             string                                          `json:"project"`
-	Projectid           string                                          `json:"projectid"`
-	Tags                []UpdateVmNicIpResponseSecuritygroupTags        `json:"tags"`
-	Virtualmachinecount int                                             `json:"virtualmachinecount"`
-	Virtualmachineids   []interface{}                                   `json:"virtualmachineids"`
-}
+	if success, ok := m["success"].(string); ok {
+		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
 
-type UpdateVmNicIpResponseSecuritygroupEgressrule struct {
-	Account           string                                             `json:"account"`
-	Cidr              string                                             `json:"cidr"`
-	Endport           int                                                `json:"endport"`
-	Icmpcode          int                                                `json:"icmpcode"`
-	Icmptype          int                                                `json:"icmptype"`
-	Protocol          string                                             `json:"protocol"`
-	Ruleid            string                                             `json:"ruleid"`
-	Securitygroupname string                                             `json:"securitygroupname"`
-	Startport         int                                                `json:"startport"`
-	Tags              []UpdateVmNicIpResponseSecuritygroupEgressruleTags `json:"tags"`
-}
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
 
-type UpdateVmNicIpResponseSecuritygroupEgressruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type UpdateVmNicIpResponseSecuritygroupIngressrule struct {
-	Account           string                                              `json:"account"`
-	Cidr              string                                              `json:"cidr"`
-	Endport           int                                                 `json:"endport"`
-	Icmpcode          int                                                 `json:"icmpcode"`
-	Icmptype          int                                                 `json:"icmptype"`
-	Protocol          string                                              `json:"protocol"`
-	Ruleid            string                                              `json:"ruleid"`
-	Securitygroupname string                                              `json:"securitygroupname"`
-	Startport         int                                                 `json:"startport"`
-	Tags              []UpdateVmNicIpResponseSecuritygroupIngressruleTags `json:"tags"`
-}
-
-type UpdateVmNicIpResponseSecuritygroupIngressruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type UpdateVmNicIpResponseSecuritygroupTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	type alias UpdateVmNicIpResponse
+	return json.Unmarshal(b, (*alias)(r))
 }

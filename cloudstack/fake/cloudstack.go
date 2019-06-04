@@ -28,7 +28,7 @@ type CloudstackServer struct {
 	Hook    func(w http.ResponseWriter, r *http.Request) bool
 	idx     map[string]int
 	Jobs    map[string]func() interface{}
-	tags    map[string][]cloudstack.Tag
+	tags    map[string][]cloudstack.Tags
 	lbRules map[string]loadBalancerRule
 	ips     map[string]*cloudstack.PublicIpAddress
 	vms     map[string][]*cloudstack.VirtualMachine
@@ -39,7 +39,7 @@ func NewCloudstackServer() *CloudstackServer {
 		idx:     make(map[string]int),
 		lbRules: make(map[string]loadBalancerRule),
 		Jobs:    make(map[string]func() interface{}),
-		tags:    make(map[string][]cloudstack.Tag),
+		tags:    make(map[string][]cloudstack.Tags),
 		ips:     make(map[string]*cloudstack.PublicIpAddress),
 		vms:     make(map[string][]*cloudstack.VirtualMachine),
 	}
@@ -124,7 +124,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if tags[tag.Key] == tag.Value {
 					includeIP = true
 				}
-				ip.Tags = append(ip.Tags, cloudstack.PublicIpAddressTags(tag))
+				ip.Tags = append(ip.Tags, tag)
 			}
 			if includeIP {
 				ips = append(ips, ip)
@@ -244,7 +244,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(MarshalResponse("createTags", obj))
 		s.Jobs[obj.JobID] = func() interface{} {
-			s.tags[r.FormValue("resourceids")] = append(s.tags[r.FormValue("resourceids")], cloudstack.Tag{
+			s.tags[r.FormValue("resourceids")] = append(s.tags[r.FormValue("resourceids")], cloudstack.Tags{
 				Key:   r.FormValue("tags[0].key"),
 				Value: r.FormValue("tags[0].value"),
 			})
@@ -276,11 +276,14 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		keyFilter := r.FormValue("key")
 		tags := s.tags[r.FormValue("resourceid")]
 		var ptrTags []*cloudstack.Tag
-		for i, tag := range tags {
+		for _, tag := range tags {
 			if keyFilter != "" && tag.Key != keyFilter {
 				continue
 			}
-			ptrTags = append(ptrTags, &tags[i])
+			ptrTags = append(ptrTags, &cloudstack.Tag{
+				Key:   tag.Key,
+				Value: tag.Value,
+			})
 		}
 		w.Write(MarshalResponse("listTagsResponse", cloudstack.ListTagsResponse{
 			Count: len(ptrTags),

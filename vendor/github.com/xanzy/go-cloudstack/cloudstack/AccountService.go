@@ -109,8 +109,9 @@ func (s *AccountService) AddAccountToProject(p *AddAccountToProjectParams) (*Add
 }
 
 type AddAccountToProjectResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -334,6 +335,8 @@ type CreateAccountResponse struct {
 	Iptotal                   int64                       `json:"iptotal"`
 	Iscleanuprequired         bool                        `json:"iscleanuprequired"`
 	Isdefault                 bool                        `json:"isdefault"`
+	JobID                     string                      `json:"jobid"`
+	Jobstatus                 int                         `json:"jobstatus"`
 	Memoryavailable           string                      `json:"memoryavailable"`
 	Memorylimit               string                      `json:"memorylimit"`
 	Memorytotal               int64                       `json:"memorytotal"`
@@ -398,6 +401,7 @@ type CreateAccountResponseUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }
 
 type DeleteAccountParams struct {
@@ -463,8 +467,9 @@ func (s *AccountService) DeleteAccount(p *DeleteAccountParams) (*DeleteAccountRe
 }
 
 type DeleteAccountResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -543,8 +548,9 @@ func (s *AccountService) DeleteAccountFromProject(p *DeleteAccountFromProjectPar
 }
 
 type DeleteAccountFromProjectResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -650,7 +656,6 @@ func (s *AccountService) DisableAccount(p *DisableAccountParams) (*DisableAccoun
 }
 
 type DisableAccountResponse struct {
-	JobID                     string                       `json:"jobid"`
 	Accountdetails            map[string]string            `json:"accountdetails"`
 	Accounttype               int                          `json:"accounttype"`
 	Cpuavailable              string                       `json:"cpuavailable"`
@@ -666,6 +671,8 @@ type DisableAccountResponse struct {
 	Iptotal                   int64                        `json:"iptotal"`
 	Iscleanuprequired         bool                         `json:"iscleanuprequired"`
 	Isdefault                 bool                         `json:"isdefault"`
+	JobID                     string                       `json:"jobid"`
+	Jobstatus                 int                          `json:"jobstatus"`
 	Memoryavailable           string                       `json:"memoryavailable"`
 	Memorylimit               string                       `json:"memorylimit"`
 	Memorytotal               int64                        `json:"memorytotal"`
@@ -730,6 +737,7 @@ type DisableAccountResponseUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }
 
 type EnableAccountParams struct {
@@ -816,6 +824,8 @@ type EnableAccountResponse struct {
 	Iptotal                   int64                       `json:"iptotal"`
 	Iscleanuprequired         bool                        `json:"iscleanuprequired"`
 	Isdefault                 bool                        `json:"isdefault"`
+	JobID                     string                      `json:"jobid"`
+	Jobstatus                 int                         `json:"jobstatus"`
 	Memoryavailable           string                      `json:"memoryavailable"`
 	Memorylimit               string                      `json:"memorylimit"`
 	Memorytotal               int64                       `json:"memorytotal"`
@@ -880,6 +890,7 @@ type EnableAccountResponseUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }
 
 type GetSolidFireAccountIdParams struct {
@@ -942,7 +953,9 @@ func (s *AccountService) GetSolidFireAccountId(p *GetSolidFireAccountIdParams) (
 }
 
 type GetSolidFireAccountIdResponse struct {
-	SolidFireAccountId int64 `json:"solidFireAccountId"`
+	JobID              string `json:"jobid"`
+	Jobstatus          int    `json:"jobstatus"`
+	SolidFireAccountId int64  `json:"solidFireAccountId"`
 }
 
 type ListAccountsParams struct {
@@ -1211,6 +1224,8 @@ type Account struct {
 	Iptotal                   int64             `json:"iptotal"`
 	Iscleanuprequired         bool              `json:"iscleanuprequired"`
 	Isdefault                 bool              `json:"isdefault"`
+	JobID                     string            `json:"jobid"`
+	Jobstatus                 int               `json:"jobstatus"`
 	Memoryavailable           string            `json:"memoryavailable"`
 	Memorylimit               string            `json:"memorylimit"`
 	Memorytotal               int64             `json:"memorytotal"`
@@ -1275,6 +1290,7 @@ type AccountUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }
 
 type ListProjectAccountsParams struct {
@@ -1424,52 +1440,55 @@ type ListProjectAccountsResponse struct {
 }
 
 type ProjectAccount struct {
-	Account                   string               `json:"account"`
-	Cpuavailable              string               `json:"cpuavailable"`
-	Cpulimit                  string               `json:"cpulimit"`
-	Cputotal                  int64                `json:"cputotal"`
-	Displaytext               string               `json:"displaytext"`
-	Domain                    string               `json:"domain"`
-	Domainid                  string               `json:"domainid"`
-	Id                        string               `json:"id"`
-	Ipavailable               string               `json:"ipavailable"`
-	Iplimit                   string               `json:"iplimit"`
-	Iptotal                   int64                `json:"iptotal"`
-	Memoryavailable           string               `json:"memoryavailable"`
-	Memorylimit               string               `json:"memorylimit"`
-	Memorytotal               int64                `json:"memorytotal"`
-	Name                      string               `json:"name"`
-	Networkavailable          string               `json:"networkavailable"`
-	Networklimit              string               `json:"networklimit"`
-	Networktotal              int64                `json:"networktotal"`
-	Primarystorageavailable   string               `json:"primarystorageavailable"`
-	Primarystoragelimit       string               `json:"primarystoragelimit"`
-	Primarystoragetotal       int64                `json:"primarystoragetotal"`
-	Secondarystorageavailable string               `json:"secondarystorageavailable"`
-	Secondarystoragelimit     string               `json:"secondarystoragelimit"`
-	Secondarystoragetotal     float64              `json:"secondarystoragetotal"`
-	Snapshotavailable         string               `json:"snapshotavailable"`
-	Snapshotlimit             string               `json:"snapshotlimit"`
-	Snapshottotal             int64                `json:"snapshottotal"`
-	State                     string               `json:"state"`
-	Tags                      []ProjectAccountTags `json:"tags"`
-	Templateavailable         string               `json:"templateavailable"`
-	Templatelimit             string               `json:"templatelimit"`
-	Templatetotal             int64                `json:"templatetotal"`
-	Vmavailable               string               `json:"vmavailable"`
-	Vmlimit                   string               `json:"vmlimit"`
-	Vmrunning                 int                  `json:"vmrunning"`
-	Vmstopped                 int                  `json:"vmstopped"`
-	Vmtotal                   int64                `json:"vmtotal"`
-	Volumeavailable           string               `json:"volumeavailable"`
-	Volumelimit               string               `json:"volumelimit"`
-	Volumetotal               int64                `json:"volumetotal"`
-	Vpcavailable              string               `json:"vpcavailable"`
-	Vpclimit                  string               `json:"vpclimit"`
-	Vpctotal                  int64                `json:"vpctotal"`
+	Account                   string  `json:"account"`
+	Cpuavailable              string  `json:"cpuavailable"`
+	Cpulimit                  string  `json:"cpulimit"`
+	Cputotal                  int64   `json:"cputotal"`
+	Displaytext               string  `json:"displaytext"`
+	Domain                    string  `json:"domain"`
+	Domainid                  string  `json:"domainid"`
+	Id                        string  `json:"id"`
+	Ipavailable               string  `json:"ipavailable"`
+	Iplimit                   string  `json:"iplimit"`
+	Iptotal                   int64   `json:"iptotal"`
+	JobID                     string  `json:"jobid"`
+	Jobstatus                 int     `json:"jobstatus"`
+	Memoryavailable           string  `json:"memoryavailable"`
+	Memorylimit               string  `json:"memorylimit"`
+	Memorytotal               int64   `json:"memorytotal"`
+	Name                      string  `json:"name"`
+	Networkavailable          string  `json:"networkavailable"`
+	Networklimit              string  `json:"networklimit"`
+	Networktotal              int64   `json:"networktotal"`
+	Primarystorageavailable   string  `json:"primarystorageavailable"`
+	Primarystoragelimit       string  `json:"primarystoragelimit"`
+	Primarystoragetotal       int64   `json:"primarystoragetotal"`
+	Projectaccountname        string  `json:"projectaccountname"`
+	Secondarystorageavailable string  `json:"secondarystorageavailable"`
+	Secondarystoragelimit     string  `json:"secondarystoragelimit"`
+	Secondarystoragetotal     float64 `json:"secondarystoragetotal"`
+	Snapshotavailable         string  `json:"snapshotavailable"`
+	Snapshotlimit             string  `json:"snapshotlimit"`
+	Snapshottotal             int64   `json:"snapshottotal"`
+	State                     string  `json:"state"`
+	Tags                      []Tags  `json:"tags"`
+	Templateavailable         string  `json:"templateavailable"`
+	Templatelimit             string  `json:"templatelimit"`
+	Templatetotal             int64   `json:"templatetotal"`
+	Vmavailable               string  `json:"vmavailable"`
+	Vmlimit                   string  `json:"vmlimit"`
+	Vmrunning                 int     `json:"vmrunning"`
+	Vmstopped                 int     `json:"vmstopped"`
+	Vmtotal                   int64   `json:"vmtotal"`
+	Volumeavailable           string  `json:"volumeavailable"`
+	Volumelimit               string  `json:"volumelimit"`
+	Volumetotal               int64   `json:"volumetotal"`
+	Vpcavailable              string  `json:"vpcavailable"`
+	Vpclimit                  string  `json:"vpclimit"`
+	Vpctotal                  int64   `json:"vpctotal"`
 }
 
-type ProjectAccountTags struct {
+type Tags struct {
 	Account      string `json:"account"`
 	Customer     string `json:"customer"`
 	Domain       string `json:"domain"`
@@ -1557,6 +1576,8 @@ type LockAccountResponse struct {
 	Iptotal                   int64                     `json:"iptotal"`
 	Iscleanuprequired         bool                      `json:"iscleanuprequired"`
 	Isdefault                 bool                      `json:"isdefault"`
+	JobID                     string                    `json:"jobid"`
+	Jobstatus                 int                       `json:"jobstatus"`
 	Memoryavailable           string                    `json:"memoryavailable"`
 	Memorylimit               string                    `json:"memorylimit"`
 	Memorytotal               int64                     `json:"memorytotal"`
@@ -1621,6 +1642,7 @@ type LockAccountResponseUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }
 
 type MarkDefaultZoneForAccountParams struct {
@@ -1715,7 +1737,6 @@ func (s *AccountService) MarkDefaultZoneForAccount(p *MarkDefaultZoneForAccountP
 }
 
 type MarkDefaultZoneForAccountResponse struct {
-	JobID                     string                                  `json:"jobid"`
 	Accountdetails            map[string]string                       `json:"accountdetails"`
 	Accounttype               int                                     `json:"accounttype"`
 	Cpuavailable              string                                  `json:"cpuavailable"`
@@ -1731,6 +1752,8 @@ type MarkDefaultZoneForAccountResponse struct {
 	Iptotal                   int64                                   `json:"iptotal"`
 	Iscleanuprequired         bool                                    `json:"iscleanuprequired"`
 	Isdefault                 bool                                    `json:"isdefault"`
+	JobID                     string                                  `json:"jobid"`
+	Jobstatus                 int                                     `json:"jobstatus"`
 	Memoryavailable           string                                  `json:"memoryavailable"`
 	Memorylimit               string                                  `json:"memorylimit"`
 	Memorytotal               int64                                   `json:"memorytotal"`
@@ -1795,6 +1818,7 @@ type MarkDefaultZoneForAccountResponseUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }
 
 type UpdateAccountParams struct {
@@ -1828,6 +1852,9 @@ func (p *UpdateAccountParams) toURLValues() url.Values {
 	}
 	if v, found := p.p["newname"]; found {
 		u.Set("newname", v.(string))
+	}
+	if v, found := p.p["roleid"]; found {
+		u.Set("roleid", v.(string))
 	}
 	return u
 }
@@ -1880,12 +1907,19 @@ func (p *UpdateAccountParams) SetNewname(v string) {
 	return
 }
 
+func (p *UpdateAccountParams) SetRoleid(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["roleid"] = v
+	return
+}
+
 // You should always use this function to get a new UpdateAccountParams instance,
 // as then you are sure you have configured all required params
-func (s *AccountService) NewUpdateAccountParams(newname string) *UpdateAccountParams {
+func (s *AccountService) NewUpdateAccountParams() *UpdateAccountParams {
 	p := &UpdateAccountParams{}
 	p.p = make(map[string]interface{})
-	p.p["newname"] = newname
 	return p
 }
 
@@ -1920,6 +1954,8 @@ type UpdateAccountResponse struct {
 	Iptotal                   int64                       `json:"iptotal"`
 	Iscleanuprequired         bool                        `json:"iscleanuprequired"`
 	Isdefault                 bool                        `json:"isdefault"`
+	JobID                     string                      `json:"jobid"`
+	Jobstatus                 int                         `json:"jobstatus"`
 	Memoryavailable           string                      `json:"memoryavailable"`
 	Memorylimit               string                      `json:"memorylimit"`
 	Memorytotal               int64                       `json:"memorytotal"`
@@ -1984,4 +2020,5 @@ type UpdateAccountResponseUser struct {
 	State               string `json:"state"`
 	Timezone            string `json:"timezone"`
 	Username            string `json:"username"`
+	Usersource          string `json:"usersource"`
 }

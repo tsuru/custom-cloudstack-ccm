@@ -24,135 +24,6 @@ import (
 	"strings"
 )
 
-type AddF5LoadBalancerParams struct {
-	p map[string]interface{}
-}
-
-func (p *AddF5LoadBalancerParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["networkdevicetype"]; found {
-		u.Set("networkdevicetype", v.(string))
-	}
-	if v, found := p.p["password"]; found {
-		u.Set("password", v.(string))
-	}
-	if v, found := p.p["physicalnetworkid"]; found {
-		u.Set("physicalnetworkid", v.(string))
-	}
-	if v, found := p.p["url"]; found {
-		u.Set("url", v.(string))
-	}
-	if v, found := p.p["username"]; found {
-		u.Set("username", v.(string))
-	}
-	return u
-}
-
-func (p *AddF5LoadBalancerParams) SetNetworkdevicetype(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["networkdevicetype"] = v
-	return
-}
-
-func (p *AddF5LoadBalancerParams) SetPassword(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["password"] = v
-	return
-}
-
-func (p *AddF5LoadBalancerParams) SetPhysicalnetworkid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["physicalnetworkid"] = v
-	return
-}
-
-func (p *AddF5LoadBalancerParams) SetUrl(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["url"] = v
-	return
-}
-
-func (p *AddF5LoadBalancerParams) SetUsername(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["username"] = v
-	return
-}
-
-// You should always use this function to get a new AddF5LoadBalancerParams instance,
-// as then you are sure you have configured all required params
-func (s *LoadBalancerService) NewAddF5LoadBalancerParams(networkdevicetype string, password string, physicalnetworkid string, url string, username string) *AddF5LoadBalancerParams {
-	p := &AddF5LoadBalancerParams{}
-	p.p = make(map[string]interface{})
-	p.p["networkdevicetype"] = networkdevicetype
-	p.p["password"] = password
-	p.p["physicalnetworkid"] = physicalnetworkid
-	p.p["url"] = url
-	p.p["username"] = username
-	return p
-}
-
-// Adds a F5 BigIP load balancer device
-func (s *LoadBalancerService) AddF5LoadBalancer(p *AddF5LoadBalancerParams) (*AddF5LoadBalancerResponse, error) {
-	resp, err := s.cs.newRequest("addF5LoadBalancer", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r AddF5LoadBalancerResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	// If we have a async client, we need to wait for the async result
-	if s.cs.async {
-		b, err := s.cs.GetAsyncJobResult(r.JobID, s.cs.timeout)
-		if err != nil {
-			if err == AsyncTimeoutErr {
-				return &r, err
-			}
-			return nil, err
-		}
-
-		b, err = getRawValue(b)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(b, &r); err != nil {
-			return nil, err
-		}
-	}
-
-	return &r, nil
-}
-
-type AddF5LoadBalancerResponse struct {
-	JobID             string `json:"jobid"`
-	Ipaddress         string `json:"ipaddress"`
-	Lbdevicecapacity  int64  `json:"lbdevicecapacity"`
-	Lbdevicededicated bool   `json:"lbdevicededicated"`
-	Lbdeviceid        string `json:"lbdeviceid"`
-	Lbdevicename      string `json:"lbdevicename"`
-	Lbdevicestate     string `json:"lbdevicestate"`
-	Physicalnetworkid string `json:"physicalnetworkid"`
-	Privateinterface  string `json:"privateinterface"`
-	Provider          string `json:"provider"`
-	Publicinterface   string `json:"publicinterface"`
-}
-
 type AddNetscalerLoadBalancerParams struct {
 	p map[string]interface{}
 }
@@ -315,12 +186,13 @@ func (s *LoadBalancerService) AddNetscalerLoadBalancer(p *AddNetscalerLoadBalanc
 }
 
 type AddNetscalerLoadBalancerResponse struct {
-	JobID                   string   `json:"jobid"`
 	Gslbprovider            bool     `json:"gslbprovider"`
 	Gslbproviderprivateip   string   `json:"gslbproviderprivateip"`
 	Gslbproviderpublicip    string   `json:"gslbproviderpublicip"`
 	Ipaddress               string   `json:"ipaddress"`
 	Isexclusivegslbprovider bool     `json:"isexclusivegslbprovider"`
+	JobID                   string   `json:"jobid"`
+	Jobstatus               int      `json:"jobstatus"`
 	Lbdevicecapacity        int64    `json:"lbdevicecapacity"`
 	Lbdevicededicated       bool     `json:"lbdevicededicated"`
 	Lbdeviceid              string   `json:"lbdeviceid"`
@@ -408,8 +280,9 @@ func (s *LoadBalancerService) AssignCertToLoadBalancer(p *AssignCertToLoadBalanc
 }
 
 type AssignCertToLoadBalancerResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -505,8 +378,9 @@ func (s *LoadBalancerService) AssignToGlobalLoadBalancerRule(p *AssignToGlobalLo
 }
 
 type AssignToGlobalLoadBalancerRuleResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -601,102 +475,10 @@ func (s *LoadBalancerService) AssignToLoadBalancerRule(p *AssignToLoadBalancerRu
 }
 
 type AssignToLoadBalancerRuleResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
-}
-
-type ConfigureF5LoadBalancerParams struct {
-	p map[string]interface{}
-}
-
-func (p *ConfigureF5LoadBalancerParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["lbdevicecapacity"]; found {
-		vv := strconv.FormatInt(v.(int64), 10)
-		u.Set("lbdevicecapacity", vv)
-	}
-	if v, found := p.p["lbdeviceid"]; found {
-		u.Set("lbdeviceid", v.(string))
-	}
-	return u
-}
-
-func (p *ConfigureF5LoadBalancerParams) SetLbdevicecapacity(v int64) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["lbdevicecapacity"] = v
-	return
-}
-
-func (p *ConfigureF5LoadBalancerParams) SetLbdeviceid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["lbdeviceid"] = v
-	return
-}
-
-// You should always use this function to get a new ConfigureF5LoadBalancerParams instance,
-// as then you are sure you have configured all required params
-func (s *LoadBalancerService) NewConfigureF5LoadBalancerParams(lbdeviceid string) *ConfigureF5LoadBalancerParams {
-	p := &ConfigureF5LoadBalancerParams{}
-	p.p = make(map[string]interface{})
-	p.p["lbdeviceid"] = lbdeviceid
-	return p
-}
-
-// configures a F5 load balancer device
-func (s *LoadBalancerService) ConfigureF5LoadBalancer(p *ConfigureF5LoadBalancerParams) (*F5LoadBalancerResponse, error) {
-	resp, err := s.cs.newRequest("configureF5LoadBalancer", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r F5LoadBalancerResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	// If we have a async client, we need to wait for the async result
-	if s.cs.async {
-		b, err := s.cs.GetAsyncJobResult(r.JobID, s.cs.timeout)
-		if err != nil {
-			if err == AsyncTimeoutErr {
-				return &r, err
-			}
-			return nil, err
-		}
-
-		b, err = getRawValue(b)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(b, &r); err != nil {
-			return nil, err
-		}
-	}
-
-	return &r, nil
-}
-
-type F5LoadBalancerResponse struct {
-	JobID             string `json:"jobid"`
-	Ipaddress         string `json:"ipaddress"`
-	Lbdevicecapacity  int64  `json:"lbdevicecapacity"`
-	Lbdevicededicated bool   `json:"lbdevicededicated"`
-	Lbdeviceid        string `json:"lbdeviceid"`
-	Lbdevicename      string `json:"lbdevicename"`
-	Lbdevicestate     string `json:"lbdevicestate"`
-	Physicalnetworkid string `json:"physicalnetworkid"`
-	Privateinterface  string `json:"privateinterface"`
-	Provider          string `json:"provider"`
-	Publicinterface   string `json:"publicinterface"`
 }
 
 type ConfigureNetscalerLoadBalancerParams struct {
@@ -815,12 +597,13 @@ func (s *LoadBalancerService) ConfigureNetscalerLoadBalancer(p *ConfigureNetscal
 }
 
 type NetscalerLoadBalancerResponse struct {
-	JobID                   string   `json:"jobid"`
 	Gslbprovider            bool     `json:"gslbprovider"`
 	Gslbproviderprivateip   string   `json:"gslbproviderprivateip"`
 	Gslbproviderpublicip    string   `json:"gslbproviderpublicip"`
 	Ipaddress               string   `json:"ipaddress"`
 	Isexclusivegslbprovider bool     `json:"isexclusivegslbprovider"`
+	JobID                   string   `json:"jobid"`
+	Jobstatus               int      `json:"jobstatus"`
 	Lbdevicecapacity        int64    `json:"lbdevicecapacity"`
 	Lbdevicededicated       bool     `json:"lbdevicededicated"`
 	Lbdeviceid              string   `json:"lbdeviceid"`
@@ -993,7 +776,6 @@ func (s *LoadBalancerService) CreateGlobalLoadBalancerRule(p *CreateGlobalLoadBa
 }
 
 type CreateGlobalLoadBalancerRuleResponse struct {
-	JobID                       string                                                 `json:"jobid"`
 	Account                     string                                                 `json:"account"`
 	Description                 string                                                 `json:"description"`
 	Domain                      string                                                 `json:"domain"`
@@ -1003,6 +785,8 @@ type CreateGlobalLoadBalancerRuleResponse struct {
 	Gslbservicetype             string                                                 `json:"gslbservicetype"`
 	Gslbstickysessionmethodname string                                                 `json:"gslbstickysessionmethodname"`
 	Id                          string                                                 `json:"id"`
+	JobID                       string                                                 `json:"jobid"`
+	Jobstatus                   int                                                    `json:"jobstatus"`
 	Loadbalancerrule            []CreateGlobalLoadBalancerRuleResponseLoadbalancerrule `json:"loadbalancerrule"`
 	Name                        string                                                 `json:"name"`
 	Project                     string                                                 `json:"project"`
@@ -1011,39 +795,27 @@ type CreateGlobalLoadBalancerRuleResponse struct {
 }
 
 type CreateGlobalLoadBalancerRuleResponseLoadbalancerrule struct {
-	Account     string                                                     `json:"account"`
-	Algorithm   string                                                     `json:"algorithm"`
-	Cidrlist    string                                                     `json:"cidrlist"`
-	Description string                                                     `json:"description"`
-	Domain      string                                                     `json:"domain"`
-	Domainid    string                                                     `json:"domainid"`
-	Fordisplay  bool                                                       `json:"fordisplay"`
-	Id          string                                                     `json:"id"`
-	Name        string                                                     `json:"name"`
-	Networkid   string                                                     `json:"networkid"`
-	Privateport string                                                     `json:"privateport"`
-	Project     string                                                     `json:"project"`
-	Projectid   string                                                     `json:"projectid"`
-	Protocol    string                                                     `json:"protocol"`
-	Publicip    string                                                     `json:"publicip"`
-	Publicipid  string                                                     `json:"publicipid"`
-	Publicport  string                                                     `json:"publicport"`
-	State       string                                                     `json:"state"`
-	Tags        []CreateGlobalLoadBalancerRuleResponseLoadbalancerruleTags `json:"tags"`
-	Zoneid      string                                                     `json:"zoneid"`
-}
-
-type CreateGlobalLoadBalancerRuleResponseLoadbalancerruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	Account     string `json:"account"`
+	Algorithm   string `json:"algorithm"`
+	Cidrlist    string `json:"cidrlist"`
+	Description string `json:"description"`
+	Domain      string `json:"domain"`
+	Domainid    string `json:"domainid"`
+	Fordisplay  bool   `json:"fordisplay"`
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Networkid   string `json:"networkid"`
+	Privateport string `json:"privateport"`
+	Project     string `json:"project"`
+	Projectid   string `json:"projectid"`
+	Protocol    string `json:"protocol"`
+	Publicip    string `json:"publicip"`
+	Publicipid  string `json:"publicipid"`
+	Publicport  string `json:"publicport"`
+	State       string `json:"state"`
+	Tags        []Tags `json:"tags"`
+	Zoneid      string `json:"zoneid"`
+	Zonename    string `json:"zonename"`
 }
 
 type CreateLBHealthCheckPolicyParams struct {
@@ -1196,11 +968,12 @@ func (s *LoadBalancerService) CreateLBHealthCheckPolicy(p *CreateLBHealthCheckPo
 }
 
 type CreateLBHealthCheckPolicyResponse struct {
-	JobID             string                                               `json:"jobid"`
 	Account           string                                               `json:"account"`
 	Domain            string                                               `json:"domain"`
 	Domainid          string                                               `json:"domainid"`
 	Healthcheckpolicy []CreateLBHealthCheckPolicyResponseHealthcheckpolicy `json:"healthcheckpolicy"`
+	JobID             string                                               `json:"jobid"`
+	Jobstatus         int                                                  `json:"jobstatus"`
 	Lbruleid          string                                               `json:"lbruleid"`
 	Zoneid            string                                               `json:"zoneid"`
 }
@@ -1348,11 +1121,12 @@ func (s *LoadBalancerService) CreateLBStickinessPolicy(p *CreateLBStickinessPoli
 }
 
 type CreateLBStickinessPolicyResponse struct {
-	JobID            string                                             `json:"jobid"`
 	Account          string                                             `json:"account"`
 	Description      string                                             `json:"description"`
 	Domain           string                                             `json:"domain"`
 	Domainid         string                                             `json:"domainid"`
+	JobID            string                                             `json:"jobid"`
+	Jobstatus        int                                                `json:"jobstatus"`
 	Lbruleid         string                                             `json:"lbruleid"`
 	Name             string                                             `json:"name"`
 	State            string                                             `json:"state"`
@@ -1546,7 +1320,6 @@ func (s *LoadBalancerService) CreateLoadBalancer(p *CreateLoadBalancerParams) (*
 }
 
 type CreateLoadBalancerResponse struct {
-	JobID                    string                                           `json:"jobid"`
 	Account                  string                                           `json:"account"`
 	Algorithm                string                                           `json:"algorithm"`
 	Description              string                                           `json:"description"`
@@ -1554,6 +1327,8 @@ type CreateLoadBalancerResponse struct {
 	Domainid                 string                                           `json:"domainid"`
 	Fordisplay               bool                                             `json:"fordisplay"`
 	Id                       string                                           `json:"id"`
+	JobID                    string                                           `json:"jobid"`
+	Jobstatus                int                                              `json:"jobstatus"`
 	Loadbalancerinstance     []CreateLoadBalancerResponseLoadbalancerinstance `json:"loadbalancerinstance"`
 	Loadbalancerrule         []CreateLoadBalancerResponseLoadbalancerrule     `json:"loadbalancerrule"`
 	Name                     string                                           `json:"name"`
@@ -1562,7 +1337,7 @@ type CreateLoadBalancerResponse struct {
 	Projectid                string                                           `json:"projectid"`
 	Sourceipaddress          string                                           `json:"sourceipaddress"`
 	Sourceipaddressnetworkid string                                           `json:"sourceipaddressnetworkid"`
-	Tags                     []CreateLoadBalancerResponseTags                 `json:"tags"`
+	Tags                     []Tags                                           `json:"tags"`
 }
 
 type CreateLoadBalancerResponseLoadbalancerrule struct {
@@ -1576,19 +1351,6 @@ type CreateLoadBalancerResponseLoadbalancerinstance struct {
 	Ipaddress string `json:"ipaddress"`
 	Name      string `json:"name"`
 	State     string `json:"state"`
-}
-
-type CreateLoadBalancerResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
 }
 
 type CreateLoadBalancerRuleParams struct {
@@ -1810,108 +1572,29 @@ func (s *LoadBalancerService) CreateLoadBalancerRule(p *CreateLoadBalancerRulePa
 }
 
 type CreateLoadBalancerRuleResponse struct {
-	JobID       string                               `json:"jobid"`
-	Account     string                               `json:"account"`
-	Algorithm   string                               `json:"algorithm"`
-	Cidrlist    string                               `json:"cidrlist"`
-	Description string                               `json:"description"`
-	Domain      string                               `json:"domain"`
-	Domainid    string                               `json:"domainid"`
-	Fordisplay  bool                                 `json:"fordisplay"`
-	Id          string                               `json:"id"`
-	Name        string                               `json:"name"`
-	Networkid   string                               `json:"networkid"`
-	Privateport string                               `json:"privateport"`
-	Project     string                               `json:"project"`
-	Projectid   string                               `json:"projectid"`
-	Protocol    string                               `json:"protocol"`
-	Publicip    string                               `json:"publicip"`
-	Publicipid  string                               `json:"publicipid"`
-	Publicport  string                               `json:"publicport"`
-	State       string                               `json:"state"`
-	Tags        []CreateLoadBalancerRuleResponseTags `json:"tags"`
-	Zoneid      string                               `json:"zoneid"`
-}
-
-type CreateLoadBalancerRuleResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type DeleteF5LoadBalancerParams struct {
-	p map[string]interface{}
-}
-
-func (p *DeleteF5LoadBalancerParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["lbdeviceid"]; found {
-		u.Set("lbdeviceid", v.(string))
-	}
-	return u
-}
-
-func (p *DeleteF5LoadBalancerParams) SetLbdeviceid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["lbdeviceid"] = v
-	return
-}
-
-// You should always use this function to get a new DeleteF5LoadBalancerParams instance,
-// as then you are sure you have configured all required params
-func (s *LoadBalancerService) NewDeleteF5LoadBalancerParams(lbdeviceid string) *DeleteF5LoadBalancerParams {
-	p := &DeleteF5LoadBalancerParams{}
-	p.p = make(map[string]interface{})
-	p.p["lbdeviceid"] = lbdeviceid
-	return p
-}
-
-//  delete a F5 load balancer device
-func (s *LoadBalancerService) DeleteF5LoadBalancer(p *DeleteF5LoadBalancerParams) (*DeleteF5LoadBalancerResponse, error) {
-	resp, err := s.cs.newRequest("deleteF5LoadBalancer", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r DeleteF5LoadBalancerResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	// If we have a async client, we need to wait for the async result
-	if s.cs.async {
-		b, err := s.cs.GetAsyncJobResult(r.JobID, s.cs.timeout)
-		if err != nil {
-			if err == AsyncTimeoutErr {
-				return &r, err
-			}
-			return nil, err
-		}
-
-		if err := json.Unmarshal(b, &r); err != nil {
-			return nil, err
-		}
-	}
-
-	return &r, nil
-}
-
-type DeleteF5LoadBalancerResponse struct {
+	Account     string `json:"account"`
+	Algorithm   string `json:"algorithm"`
+	Cidrlist    string `json:"cidrlist"`
+	Description string `json:"description"`
+	Domain      string `json:"domain"`
+	Domainid    string `json:"domainid"`
+	Fordisplay  bool   `json:"fordisplay"`
+	Id          string `json:"id"`
 	JobID       string `json:"jobid"`
-	Displaytext string `json:"displaytext"`
-	Success     bool   `json:"success"`
+	Jobstatus   int    `json:"jobstatus"`
+	Name        string `json:"name"`
+	Networkid   string `json:"networkid"`
+	Privateport string `json:"privateport"`
+	Project     string `json:"project"`
+	Projectid   string `json:"projectid"`
+	Protocol    string `json:"protocol"`
+	Publicip    string `json:"publicip"`
+	Publicipid  string `json:"publicipid"`
+	Publicport  string `json:"publicport"`
+	State       string `json:"state"`
+	Tags        []Tags `json:"tags"`
+	Zoneid      string `json:"zoneid"`
+	Zonename    string `json:"zonename"`
 }
 
 type DeleteGlobalLoadBalancerRuleParams struct {
@@ -1977,8 +1660,9 @@ func (s *LoadBalancerService) DeleteGlobalLoadBalancerRule(p *DeleteGlobalLoadBa
 }
 
 type DeleteGlobalLoadBalancerRuleResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2045,8 +1729,9 @@ func (s *LoadBalancerService) DeleteLBHealthCheckPolicy(p *DeleteLBHealthCheckPo
 }
 
 type DeleteLBHealthCheckPolicyResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2113,8 +1798,9 @@ func (s *LoadBalancerService) DeleteLBStickinessPolicy(p *DeleteLBStickinessPoli
 }
 
 type DeleteLBStickinessPolicyResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2181,8 +1867,9 @@ func (s *LoadBalancerService) DeleteLoadBalancer(p *DeleteLoadBalancerParams) (*
 }
 
 type DeleteLoadBalancerResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2249,8 +1936,9 @@ func (s *LoadBalancerService) DeleteLoadBalancerRule(p *DeleteLoadBalancerRulePa
 }
 
 type DeleteLoadBalancerRuleResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2317,8 +2005,9 @@ func (s *LoadBalancerService) DeleteNetscalerLoadBalancer(p *DeleteNetscalerLoad
 }
 
 type DeleteNetscalerLoadBalancerResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2371,6 +2060,8 @@ func (s *LoadBalancerService) DeleteSslCert(p *DeleteSslCertParams) (*DeleteSslC
 
 type DeleteSslCertResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -2389,118 +2080,16 @@ func (r *DeleteSslCertResponse) UnmarshalJSON(b []byte) error {
 		}
 	}
 
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
 	type alias DeleteSslCertResponse
 	return json.Unmarshal(b, (*alias)(r))
-}
-
-type ListF5LoadBalancersParams struct {
-	p map[string]interface{}
-}
-
-func (p *ListF5LoadBalancersParams) toURLValues() url.Values {
-	u := url.Values{}
-	if p.p == nil {
-		return u
-	}
-	if v, found := p.p["keyword"]; found {
-		u.Set("keyword", v.(string))
-	}
-	if v, found := p.p["lbdeviceid"]; found {
-		u.Set("lbdeviceid", v.(string))
-	}
-	if v, found := p.p["page"]; found {
-		vv := strconv.Itoa(v.(int))
-		u.Set("page", vv)
-	}
-	if v, found := p.p["pagesize"]; found {
-		vv := strconv.Itoa(v.(int))
-		u.Set("pagesize", vv)
-	}
-	if v, found := p.p["physicalnetworkid"]; found {
-		u.Set("physicalnetworkid", v.(string))
-	}
-	return u
-}
-
-func (p *ListF5LoadBalancersParams) SetKeyword(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["keyword"] = v
-	return
-}
-
-func (p *ListF5LoadBalancersParams) SetLbdeviceid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["lbdeviceid"] = v
-	return
-}
-
-func (p *ListF5LoadBalancersParams) SetPage(v int) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["page"] = v
-	return
-}
-
-func (p *ListF5LoadBalancersParams) SetPagesize(v int) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["pagesize"] = v
-	return
-}
-
-func (p *ListF5LoadBalancersParams) SetPhysicalnetworkid(v string) {
-	if p.p == nil {
-		p.p = make(map[string]interface{})
-	}
-	p.p["physicalnetworkid"] = v
-	return
-}
-
-// You should always use this function to get a new ListF5LoadBalancersParams instance,
-// as then you are sure you have configured all required params
-func (s *LoadBalancerService) NewListF5LoadBalancersParams() *ListF5LoadBalancersParams {
-	p := &ListF5LoadBalancersParams{}
-	p.p = make(map[string]interface{})
-	return p
-}
-
-// lists F5 load balancer devices
-func (s *LoadBalancerService) ListF5LoadBalancers(p *ListF5LoadBalancersParams) (*ListF5LoadBalancersResponse, error) {
-	resp, err := s.cs.newRequest("listF5LoadBalancers", p.toURLValues())
-	if err != nil {
-		return nil, err
-	}
-
-	var r ListF5LoadBalancersResponse
-	if err := json.Unmarshal(resp, &r); err != nil {
-		return nil, err
-	}
-
-	return &r, nil
-}
-
-type ListF5LoadBalancersResponse struct {
-	Count           int               `json:"count"`
-	F5LoadBalancers []*F5LoadBalancer `json:"f5loadbalancer"`
-}
-
-type F5LoadBalancer struct {
-	Ipaddress         string `json:"ipaddress"`
-	Lbdevicecapacity  int64  `json:"lbdevicecapacity"`
-	Lbdevicededicated bool   `json:"lbdevicededicated"`
-	Lbdeviceid        string `json:"lbdeviceid"`
-	Lbdevicename      string `json:"lbdevicename"`
-	Lbdevicestate     string `json:"lbdevicestate"`
-	Physicalnetworkid string `json:"physicalnetworkid"`
-	Privateinterface  string `json:"privateinterface"`
-	Provider          string `json:"provider"`
-	Publicinterface   string `json:"publicinterface"`
 }
 
 type ListGlobalLoadBalancerRulesParams struct {
@@ -2767,6 +2356,8 @@ type GlobalLoadBalancerRule struct {
 	Gslbservicetype             string                                   `json:"gslbservicetype"`
 	Gslbstickysessionmethodname string                                   `json:"gslbstickysessionmethodname"`
 	Id                          string                                   `json:"id"`
+	JobID                       string                                   `json:"jobid"`
+	Jobstatus                   int                                      `json:"jobstatus"`
 	Loadbalancerrule            []GlobalLoadBalancerRuleLoadbalancerrule `json:"loadbalancerrule"`
 	Name                        string                                   `json:"name"`
 	Project                     string                                   `json:"project"`
@@ -2775,39 +2366,27 @@ type GlobalLoadBalancerRule struct {
 }
 
 type GlobalLoadBalancerRuleLoadbalancerrule struct {
-	Account     string                                       `json:"account"`
-	Algorithm   string                                       `json:"algorithm"`
-	Cidrlist    string                                       `json:"cidrlist"`
-	Description string                                       `json:"description"`
-	Domain      string                                       `json:"domain"`
-	Domainid    string                                       `json:"domainid"`
-	Fordisplay  bool                                         `json:"fordisplay"`
-	Id          string                                       `json:"id"`
-	Name        string                                       `json:"name"`
-	Networkid   string                                       `json:"networkid"`
-	Privateport string                                       `json:"privateport"`
-	Project     string                                       `json:"project"`
-	Projectid   string                                       `json:"projectid"`
-	Protocol    string                                       `json:"protocol"`
-	Publicip    string                                       `json:"publicip"`
-	Publicipid  string                                       `json:"publicipid"`
-	Publicport  string                                       `json:"publicport"`
-	State       string                                       `json:"state"`
-	Tags        []GlobalLoadBalancerRuleLoadbalancerruleTags `json:"tags"`
-	Zoneid      string                                       `json:"zoneid"`
-}
-
-type GlobalLoadBalancerRuleLoadbalancerruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	Account     string `json:"account"`
+	Algorithm   string `json:"algorithm"`
+	Cidrlist    string `json:"cidrlist"`
+	Description string `json:"description"`
+	Domain      string `json:"domain"`
+	Domainid    string `json:"domainid"`
+	Fordisplay  bool   `json:"fordisplay"`
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Networkid   string `json:"networkid"`
+	Privateport string `json:"privateport"`
+	Project     string `json:"project"`
+	Projectid   string `json:"projectid"`
+	Protocol    string `json:"protocol"`
+	Publicip    string `json:"publicip"`
+	Publicipid  string `json:"publicipid"`
+	Publicport  string `json:"publicport"`
+	State       string `json:"state"`
+	Tags        []Tags `json:"tags"`
+	Zoneid      string `json:"zoneid"`
+	Zonename    string `json:"zonename"`
 }
 
 type ListLBHealthCheckPoliciesParams struct {
@@ -2957,6 +2536,8 @@ type LBHealthCheckPolicy struct {
 	Domain            string                                 `json:"domain"`
 	Domainid          string                                 `json:"domainid"`
 	Healthcheckpolicy []LBHealthCheckPolicyHealthcheckpolicy `json:"healthcheckpolicy"`
+	JobID             string                                 `json:"jobid"`
+	Jobstatus         int                                    `json:"jobstatus"`
 	Lbruleid          string                                 `json:"lbruleid"`
 	Zoneid            string                                 `json:"zoneid"`
 }
@@ -3120,6 +2701,8 @@ type LBStickinessPolicy struct {
 	Description      string                               `json:"description"`
 	Domain           string                               `json:"domain"`
 	Domainid         string                               `json:"domainid"`
+	JobID            string                               `json:"jobid"`
+	Jobstatus        int                                  `json:"jobstatus"`
 	Lbruleid         string                               `json:"lbruleid"`
 	Name             string                               `json:"name"`
 	State            string                               `json:"state"`
@@ -3283,6 +2866,8 @@ type ListLoadBalancerRuleInstancesResponse struct {
 }
 
 type LoadBalancerRuleInstance struct {
+	JobID                    string          `json:"jobid"`
+	Jobstatus                int             `json:"jobstatus"`
 	Lbvmipaddresses          []string        `json:"lbvmipaddresses"`
 	Loadbalancerruleinstance *VirtualMachine `json:"loadbalancerruleinstance"`
 }
@@ -3597,39 +3182,29 @@ type ListLoadBalancerRulesResponse struct {
 }
 
 type LoadBalancerRule struct {
-	Account     string                 `json:"account"`
-	Algorithm   string                 `json:"algorithm"`
-	Cidrlist    string                 `json:"cidrlist"`
-	Description string                 `json:"description"`
-	Domain      string                 `json:"domain"`
-	Domainid    string                 `json:"domainid"`
-	Fordisplay  bool                   `json:"fordisplay"`
-	Id          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Networkid   string                 `json:"networkid"`
-	Privateport string                 `json:"privateport"`
-	Project     string                 `json:"project"`
-	Projectid   string                 `json:"projectid"`
-	Protocol    string                 `json:"protocol"`
-	Publicip    string                 `json:"publicip"`
-	Publicipid  string                 `json:"publicipid"`
-	Publicport  string                 `json:"publicport"`
-	State       string                 `json:"state"`
-	Tags        []LoadBalancerRuleTags `json:"tags"`
-	Zoneid      string                 `json:"zoneid"`
-}
-
-type LoadBalancerRuleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	Account     string `json:"account"`
+	Algorithm   string `json:"algorithm"`
+	Cidrlist    string `json:"cidrlist"`
+	Description string `json:"description"`
+	Domain      string `json:"domain"`
+	Domainid    string `json:"domainid"`
+	Fordisplay  bool   `json:"fordisplay"`
+	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
+	Name        string `json:"name"`
+	Networkid   string `json:"networkid"`
+	Privateport string `json:"privateport"`
+	Project     string `json:"project"`
+	Projectid   string `json:"projectid"`
+	Protocol    string `json:"protocol"`
+	Publicip    string `json:"publicip"`
+	Publicipid  string `json:"publicipid"`
+	Publicport  string `json:"publicport"`
+	State       string `json:"state"`
+	Tags        []Tags `json:"tags"`
+	Zoneid      string `json:"zoneid"`
+	Zonename    string `json:"zonename"`
 }
 
 type ListLoadBalancersParams struct {
@@ -3949,6 +3524,8 @@ type LoadBalancer struct {
 	Domainid                 string                             `json:"domainid"`
 	Fordisplay               bool                               `json:"fordisplay"`
 	Id                       string                             `json:"id"`
+	JobID                    string                             `json:"jobid"`
+	Jobstatus                int                                `json:"jobstatus"`
 	Loadbalancerinstance     []LoadBalancerLoadbalancerinstance `json:"loadbalancerinstance"`
 	Loadbalancerrule         []LoadBalancerLoadbalancerrule     `json:"loadbalancerrule"`
 	Name                     string                             `json:"name"`
@@ -3957,7 +3534,13 @@ type LoadBalancer struct {
 	Projectid                string                             `json:"projectid"`
 	Sourceipaddress          string                             `json:"sourceipaddress"`
 	Sourceipaddressnetworkid string                             `json:"sourceipaddressnetworkid"`
-	Tags                     []LoadBalancerTags                 `json:"tags"`
+	Tags                     []Tags                             `json:"tags"`
+}
+
+type LoadBalancerLoadbalancerrule struct {
+	Instanceport int    `json:"instanceport"`
+	Sourceport   int    `json:"sourceport"`
+	State        string `json:"state"`
 }
 
 type LoadBalancerLoadbalancerinstance struct {
@@ -3965,25 +3548,6 @@ type LoadBalancerLoadbalancerinstance struct {
 	Ipaddress string `json:"ipaddress"`
 	Name      string `json:"name"`
 	State     string `json:"state"`
-}
-
-type LoadBalancerTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type LoadBalancerLoadbalancerrule struct {
-	Instanceport int    `json:"instanceport"`
-	Sourceport   int    `json:"sourceport"`
-	State        string `json:"state"`
 }
 
 type ListNetscalerLoadBalancersParams struct {
@@ -4089,6 +3653,8 @@ type NetscalerLoadBalancer struct {
 	Gslbproviderpublicip    string   `json:"gslbproviderpublicip"`
 	Ipaddress               string   `json:"ipaddress"`
 	Isexclusivegslbprovider bool     `json:"isexclusivegslbprovider"`
+	JobID                   string   `json:"jobid"`
+	Jobstatus               int      `json:"jobstatus"`
 	Lbdevicecapacity        int64    `json:"lbdevicecapacity"`
 	Lbdevicededicated       bool     `json:"lbdevicededicated"`
 	Lbdeviceid              string   `json:"lbdeviceid"`
@@ -4193,7 +3759,10 @@ type SslCert struct {
 	Domainid             string   `json:"domainid"`
 	Fingerprint          string   `json:"fingerprint"`
 	Id                   string   `json:"id"`
+	JobID                string   `json:"jobid"`
+	Jobstatus            int      `json:"jobstatus"`
 	Loadbalancerrulelist []string `json:"loadbalancerrulelist"`
+	Name                 string   `json:"name"`
 	Project              string   `json:"project"`
 	Projectid            string   `json:"projectid"`
 }
@@ -4261,8 +3830,9 @@ func (s *LoadBalancerService) RemoveCertFromLoadBalancer(p *RemoveCertFromLoadBa
 }
 
 type RemoveCertFromLoadBalancerResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -4342,8 +3912,9 @@ func (s *LoadBalancerService) RemoveFromGlobalLoadBalancerRule(p *RemoveFromGlob
 }
 
 type RemoveFromGlobalLoadBalancerRuleResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -4438,8 +4009,9 @@ func (s *LoadBalancerService) RemoveFromLoadBalancerRule(p *RemoveFromLoadBalanc
 }
 
 type RemoveFromLoadBalancerRuleResponse struct {
-	JobID       string `json:"jobid"`
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -4544,7 +4116,6 @@ func (s *LoadBalancerService) UpdateGlobalLoadBalancerRule(p *UpdateGlobalLoadBa
 }
 
 type UpdateGlobalLoadBalancerRuleResponse struct {
-	JobID                       string                                                 `json:"jobid"`
 	Account                     string                                                 `json:"account"`
 	Description                 string                                                 `json:"description"`
 	Domain                      string                                                 `json:"domain"`
@@ -4554,6 +4125,8 @@ type UpdateGlobalLoadBalancerRuleResponse struct {
 	Gslbservicetype             string                                                 `json:"gslbservicetype"`
 	Gslbstickysessionmethodname string                                                 `json:"gslbstickysessionmethodname"`
 	Id                          string                                                 `json:"id"`
+	JobID                       string                                                 `json:"jobid"`
+	Jobstatus                   int                                                    `json:"jobstatus"`
 	Loadbalancerrule            []UpdateGlobalLoadBalancerRuleResponseLoadbalancerrule `json:"loadbalancerrule"`
 	Name                        string                                                 `json:"name"`
 	Project                     string                                                 `json:"project"`
@@ -4562,39 +4135,27 @@ type UpdateGlobalLoadBalancerRuleResponse struct {
 }
 
 type UpdateGlobalLoadBalancerRuleResponseLoadbalancerrule struct {
-	Account     string                                                     `json:"account"`
-	Algorithm   string                                                     `json:"algorithm"`
-	Cidrlist    string                                                     `json:"cidrlist"`
-	Description string                                                     `json:"description"`
-	Domain      string                                                     `json:"domain"`
-	Domainid    string                                                     `json:"domainid"`
-	Fordisplay  bool                                                       `json:"fordisplay"`
-	Id          string                                                     `json:"id"`
-	Name        string                                                     `json:"name"`
-	Networkid   string                                                     `json:"networkid"`
-	Privateport string                                                     `json:"privateport"`
-	Project     string                                                     `json:"project"`
-	Projectid   string                                                     `json:"projectid"`
-	Protocol    string                                                     `json:"protocol"`
-	Publicip    string                                                     `json:"publicip"`
-	Publicipid  string                                                     `json:"publicipid"`
-	Publicport  string                                                     `json:"publicport"`
-	State       string                                                     `json:"state"`
-	Tags        []UpdateGlobalLoadBalancerRuleResponseLoadbalancerruleTags `json:"tags"`
-	Zoneid      string                                                     `json:"zoneid"`
-}
-
-type UpdateGlobalLoadBalancerRuleResponseLoadbalancerruleTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	Account     string `json:"account"`
+	Algorithm   string `json:"algorithm"`
+	Cidrlist    string `json:"cidrlist"`
+	Description string `json:"description"`
+	Domain      string `json:"domain"`
+	Domainid    string `json:"domainid"`
+	Fordisplay  bool   `json:"fordisplay"`
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Networkid   string `json:"networkid"`
+	Privateport string `json:"privateport"`
+	Project     string `json:"project"`
+	Projectid   string `json:"projectid"`
+	Protocol    string `json:"protocol"`
+	Publicip    string `json:"publicip"`
+	Publicipid  string `json:"publicipid"`
+	Publicport  string `json:"publicport"`
+	State       string `json:"state"`
+	Tags        []Tags `json:"tags"`
+	Zoneid      string `json:"zoneid"`
+	Zonename    string `json:"zonename"`
 }
 
 type UpdateLBHealthCheckPolicyParams struct {
@@ -4688,11 +4249,12 @@ func (s *LoadBalancerService) UpdateLBHealthCheckPolicy(p *UpdateLBHealthCheckPo
 }
 
 type UpdateLBHealthCheckPolicyResponse struct {
-	JobID             string                                               `json:"jobid"`
 	Account           string                                               `json:"account"`
 	Domain            string                                               `json:"domain"`
 	Domainid          string                                               `json:"domainid"`
 	Healthcheckpolicy []UpdateLBHealthCheckPolicyResponseHealthcheckpolicy `json:"healthcheckpolicy"`
+	JobID             string                                               `json:"jobid"`
+	Jobstatus         int                                                  `json:"jobstatus"`
 	Lbruleid          string                                               `json:"lbruleid"`
 	Zoneid            string                                               `json:"zoneid"`
 }
@@ -4800,11 +4362,12 @@ func (s *LoadBalancerService) UpdateLBStickinessPolicy(p *UpdateLBStickinessPoli
 }
 
 type UpdateLBStickinessPolicyResponse struct {
-	JobID            string                                             `json:"jobid"`
 	Account          string                                             `json:"account"`
 	Description      string                                             `json:"description"`
 	Domain           string                                             `json:"domain"`
 	Domainid         string                                             `json:"domainid"`
+	JobID            string                                             `json:"jobid"`
+	Jobstatus        int                                                `json:"jobstatus"`
 	Lbruleid         string                                             `json:"lbruleid"`
 	Name             string                                             `json:"name"`
 	State            string                                             `json:"state"`
@@ -4913,7 +4476,6 @@ func (s *LoadBalancerService) UpdateLoadBalancer(p *UpdateLoadBalancerParams) (*
 }
 
 type UpdateLoadBalancerResponse struct {
-	JobID                    string                                           `json:"jobid"`
 	Account                  string                                           `json:"account"`
 	Algorithm                string                                           `json:"algorithm"`
 	Description              string                                           `json:"description"`
@@ -4921,6 +4483,8 @@ type UpdateLoadBalancerResponse struct {
 	Domainid                 string                                           `json:"domainid"`
 	Fordisplay               bool                                             `json:"fordisplay"`
 	Id                       string                                           `json:"id"`
+	JobID                    string                                           `json:"jobid"`
+	Jobstatus                int                                              `json:"jobstatus"`
 	Loadbalancerinstance     []UpdateLoadBalancerResponseLoadbalancerinstance `json:"loadbalancerinstance"`
 	Loadbalancerrule         []UpdateLoadBalancerResponseLoadbalancerrule     `json:"loadbalancerrule"`
 	Name                     string                                           `json:"name"`
@@ -4929,7 +4493,13 @@ type UpdateLoadBalancerResponse struct {
 	Projectid                string                                           `json:"projectid"`
 	Sourceipaddress          string                                           `json:"sourceipaddress"`
 	Sourceipaddressnetworkid string                                           `json:"sourceipaddressnetworkid"`
-	Tags                     []UpdateLoadBalancerResponseTags                 `json:"tags"`
+	Tags                     []Tags                                           `json:"tags"`
+}
+
+type UpdateLoadBalancerResponseLoadbalancerrule struct {
+	Instanceport int    `json:"instanceport"`
+	Sourceport   int    `json:"sourceport"`
+	State        string `json:"state"`
 }
 
 type UpdateLoadBalancerResponseLoadbalancerinstance struct {
@@ -4937,25 +4507,6 @@ type UpdateLoadBalancerResponseLoadbalancerinstance struct {
 	Ipaddress string `json:"ipaddress"`
 	Name      string `json:"name"`
 	State     string `json:"state"`
-}
-
-type UpdateLoadBalancerResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
-}
-
-type UpdateLoadBalancerResponseLoadbalancerrule struct {
-	Instanceport int    `json:"instanceport"`
-	Sourceport   int    `json:"sourceport"`
-	State        string `json:"state"`
 }
 
 type UpdateLoadBalancerRuleParams struct {
@@ -4985,6 +4536,9 @@ func (p *UpdateLoadBalancerRuleParams) toURLValues() url.Values {
 	}
 	if v, found := p.p["name"]; found {
 		u.Set("name", v.(string))
+	}
+	if v, found := p.p["protocol"]; found {
+		u.Set("protocol", v.(string))
 	}
 	return u
 }
@@ -5037,6 +4591,14 @@ func (p *UpdateLoadBalancerRuleParams) SetName(v string) {
 	return
 }
 
+func (p *UpdateLoadBalancerRuleParams) SetProtocol(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["protocol"] = v
+	return
+}
+
 // You should always use this function to get a new UpdateLoadBalancerRuleParams instance,
 // as then you are sure you have configured all required params
 func (s *LoadBalancerService) NewUpdateLoadBalancerRuleParams(id string) *UpdateLoadBalancerRuleParams {
@@ -5082,40 +4644,29 @@ func (s *LoadBalancerService) UpdateLoadBalancerRule(p *UpdateLoadBalancerRulePa
 }
 
 type UpdateLoadBalancerRuleResponse struct {
-	JobID       string                               `json:"jobid"`
-	Account     string                               `json:"account"`
-	Algorithm   string                               `json:"algorithm"`
-	Cidrlist    string                               `json:"cidrlist"`
-	Description string                               `json:"description"`
-	Domain      string                               `json:"domain"`
-	Domainid    string                               `json:"domainid"`
-	Fordisplay  bool                                 `json:"fordisplay"`
-	Id          string                               `json:"id"`
-	Name        string                               `json:"name"`
-	Networkid   string                               `json:"networkid"`
-	Privateport string                               `json:"privateport"`
-	Project     string                               `json:"project"`
-	Projectid   string                               `json:"projectid"`
-	Protocol    string                               `json:"protocol"`
-	Publicip    string                               `json:"publicip"`
-	Publicipid  string                               `json:"publicipid"`
-	Publicport  string                               `json:"publicport"`
-	State       string                               `json:"state"`
-	Tags        []UpdateLoadBalancerRuleResponseTags `json:"tags"`
-	Zoneid      string                               `json:"zoneid"`
-}
-
-type UpdateLoadBalancerRuleResponseTags struct {
-	Account      string `json:"account"`
-	Customer     string `json:"customer"`
-	Domain       string `json:"domain"`
-	Domainid     string `json:"domainid"`
-	Key          string `json:"key"`
-	Project      string `json:"project"`
-	Projectid    string `json:"projectid"`
-	Resourceid   string `json:"resourceid"`
-	Resourcetype string `json:"resourcetype"`
-	Value        string `json:"value"`
+	Account     string `json:"account"`
+	Algorithm   string `json:"algorithm"`
+	Cidrlist    string `json:"cidrlist"`
+	Description string `json:"description"`
+	Domain      string `json:"domain"`
+	Domainid    string `json:"domainid"`
+	Fordisplay  bool   `json:"fordisplay"`
+	Id          string `json:"id"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
+	Name        string `json:"name"`
+	Networkid   string `json:"networkid"`
+	Privateport string `json:"privateport"`
+	Project     string `json:"project"`
+	Projectid   string `json:"projectid"`
+	Protocol    string `json:"protocol"`
+	Publicip    string `json:"publicip"`
+	Publicipid  string `json:"publicipid"`
+	Publicport  string `json:"publicport"`
+	State       string `json:"state"`
+	Tags        []Tags `json:"tags"`
+	Zoneid      string `json:"zoneid"`
+	Zonename    string `json:"zonename"`
 }
 
 type UploadSslCertParams struct {
@@ -5138,6 +4689,9 @@ func (p *UploadSslCertParams) toURLValues() url.Values {
 	}
 	if v, found := p.p["domainid"]; found {
 		u.Set("domainid", v.(string))
+	}
+	if v, found := p.p["name"]; found {
+		u.Set("name", v.(string))
 	}
 	if v, found := p.p["password"]; found {
 		u.Set("password", v.(string))
@@ -5183,6 +4737,14 @@ func (p *UploadSslCertParams) SetDomainid(v string) {
 	return
 }
 
+func (p *UploadSslCertParams) SetName(v string) {
+	if p.p == nil {
+		p.p = make(map[string]interface{})
+	}
+	p.p["name"] = v
+	return
+}
+
 func (p *UploadSslCertParams) SetPassword(v string) {
 	if p.p == nil {
 		p.p = make(map[string]interface{})
@@ -5209,10 +4771,11 @@ func (p *UploadSslCertParams) SetProjectid(v string) {
 
 // You should always use this function to get a new UploadSslCertParams instance,
 // as then you are sure you have configured all required params
-func (s *LoadBalancerService) NewUploadSslCertParams(certificate string, privatekey string) *UploadSslCertParams {
+func (s *LoadBalancerService) NewUploadSslCertParams(certificate string, name string, privatekey string) *UploadSslCertParams {
 	p := &UploadSslCertParams{}
 	p.p = make(map[string]interface{})
 	p.p["certificate"] = certificate
+	p.p["name"] = name
 	p.p["privatekey"] = privatekey
 	return p
 }
@@ -5240,7 +4803,10 @@ type UploadSslCertResponse struct {
 	Domainid             string   `json:"domainid"`
 	Fingerprint          string   `json:"fingerprint"`
 	Id                   string   `json:"id"`
+	JobID                string   `json:"jobid"`
+	Jobstatus            int      `json:"jobstatus"`
 	Loadbalancerrulelist []string `json:"loadbalancerrulelist"`
+	Name                 string   `json:"name"`
 	Project              string   `json:"project"`
 	Projectid            string   `json:"projectid"`
 }

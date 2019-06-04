@@ -75,11 +75,20 @@ type ListApisResponse struct {
 type Api struct {
 	Description string        `json:"description"`
 	Isasync     bool          `json:"isasync"`
+	JobID       string        `json:"jobid"`
+	Jobstatus   int           `json:"jobstatus"`
 	Name        string        `json:"name"`
 	Params      []ApiParams   `json:"params"`
 	Related     string        `json:"related"`
 	Response    []ApiResponse `json:"response"`
 	Since       string        `json:"since"`
+	Type        string        `json:"type"`
+}
+
+type ApiResponse struct {
+	Description string        `json:"description"`
+	Name        string        `json:"name"`
+	Response    []interface{} `json:"response"`
 	Type        string        `json:"type"`
 }
 
@@ -91,11 +100,4 @@ type ApiParams struct {
 	Required    bool   `json:"required"`
 	Since       string `json:"since"`
 	Type        string `json:"type"`
-}
-
-type ApiResponse struct {
-	Description string        `json:"description"`
-	Name        string        `json:"name"`
-	Response    []interface{} `json:"response"`
-	Type        string        `json:"type"`
 }

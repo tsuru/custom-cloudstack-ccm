@@ -724,7 +724,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
-					Tags: []cloudstack.LoadBalancerRuleTags{
+					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
 					},
 				},
@@ -742,7 +742,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
-					Tags: []cloudstack.LoadBalancerRuleTags{
+					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
 					},
 				},
@@ -766,7 +766,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
 					Publicport:  "2",
 					Privateport: "20",
-					Tags: []cloudstack.LoadBalancerRuleTags{
+					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
 					},
 				},
@@ -786,7 +786,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
 					Publicport:  "2",
 					Privateport: "20",
-					Tags: []cloudstack.LoadBalancerRuleTags{
+					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
 					},
 				},
@@ -805,7 +805,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					Publicport:  "1",
 					Privateport: "2",
 					Algorithm:   "x",
-					Tags: []cloudstack.LoadBalancerRuleTags{
+					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
 					},
 				},
@@ -823,7 +823,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
 					Publicport:  "1",
 					Privateport: "2",
-					Tags: []cloudstack.LoadBalancerRuleTags{
+					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag},
 					},
 				},

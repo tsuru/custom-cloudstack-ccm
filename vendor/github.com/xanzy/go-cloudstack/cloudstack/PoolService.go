@@ -213,6 +213,7 @@ func (s *PoolService) CreateStoragePool(p *CreateStoragePoolParams) (*CreateStor
 }
 
 type CreateStoragePoolResponse struct {
+	Allocatediops        int64             `json:"allocatediops"`
 	Capacityiops         int64             `json:"capacityiops"`
 	Clusterid            string            `json:"clusterid"`
 	Clustername          string            `json:"clustername"`
@@ -223,11 +224,14 @@ type CreateStoragePoolResponse struct {
 	Hypervisor           string            `json:"hypervisor"`
 	Id                   string            `json:"id"`
 	Ipaddress            string            `json:"ipaddress"`
+	JobID                string            `json:"jobid"`
+	Jobstatus            int               `json:"jobstatus"`
 	Name                 string            `json:"name"`
 	Overprovisionfactor  string            `json:"overprovisionfactor"`
 	Path                 string            `json:"path"`
 	Podid                string            `json:"podid"`
 	Podname              string            `json:"podname"`
+	Provider             string            `json:"provider"`
 	Scope                string            `json:"scope"`
 	State                string            `json:"state"`
 	Storagecapabilities  map[string]string `json:"storagecapabilities"`
@@ -299,6 +303,8 @@ func (s *PoolService) DeleteStoragePool(p *DeleteStoragePoolParams) (*DeleteStor
 
 type DeleteStoragePoolResponse struct {
 	Displaytext string `json:"displaytext"`
+	JobID       string `json:"jobid"`
+	Jobstatus   int    `json:"jobstatus"`
 	Success     bool   `json:"success"`
 }
 
@@ -311,6 +317,14 @@ func (r *DeleteStoragePoolResponse) UnmarshalJSON(b []byte) error {
 
 	if success, ok := m["success"].(string); ok {
 		m["success"] = success == "true"
+		b, err = json.Marshal(m)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ostypeid, ok := m["ostypeid"].(float64); ok {
+		m["ostypeid"] = strconv.Itoa(int(ostypeid))
 		b, err = json.Marshal(m)
 		if err != nil {
 			return err
@@ -404,6 +418,7 @@ func (s *PoolService) FindStoragePoolsForMigration(p *FindStoragePoolsForMigrati
 }
 
 type FindStoragePoolsForMigrationResponse struct {
+	Allocatediops        int64             `json:"allocatediops"`
 	Capacityiops         int64             `json:"capacityiops"`
 	Clusterid            string            `json:"clusterid"`
 	Clustername          string            `json:"clustername"`
@@ -414,11 +429,14 @@ type FindStoragePoolsForMigrationResponse struct {
 	Hypervisor           string            `json:"hypervisor"`
 	Id                   string            `json:"id"`
 	Ipaddress            string            `json:"ipaddress"`
+	JobID                string            `json:"jobid"`
+	Jobstatus            int               `json:"jobstatus"`
 	Name                 string            `json:"name"`
 	Overprovisionfactor  string            `json:"overprovisionfactor"`
 	Path                 string            `json:"path"`
 	Podid                string            `json:"podid"`
 	Podname              string            `json:"podname"`
+	Provider             string            `json:"provider"`
 	Scope                string            `json:"scope"`
 	State                string            `json:"state"`
 	Storagecapabilities  map[string]string `json:"storagecapabilities"`
@@ -676,6 +694,7 @@ type ListStoragePoolsResponse struct {
 }
 
 type StoragePool struct {
+	Allocatediops        int64             `json:"allocatediops"`
 	Capacityiops         int64             `json:"capacityiops"`
 	Clusterid            string            `json:"clusterid"`
 	Clustername          string            `json:"clustername"`
@@ -686,11 +705,14 @@ type StoragePool struct {
 	Hypervisor           string            `json:"hypervisor"`
 	Id                   string            `json:"id"`
 	Ipaddress            string            `json:"ipaddress"`
+	JobID                string            `json:"jobid"`
+	Jobstatus            int               `json:"jobstatus"`
 	Name                 string            `json:"name"`
 	Overprovisionfactor  string            `json:"overprovisionfactor"`
 	Path                 string            `json:"path"`
 	Podid                string            `json:"podid"`
 	Podname              string            `json:"podname"`
+	Provider             string            `json:"provider"`
 	Scope                string            `json:"scope"`
 	State                string            `json:"state"`
 	Storagecapabilities  map[string]string `json:"storagecapabilities"`
@@ -797,6 +819,7 @@ func (s *PoolService) UpdateStoragePool(p *UpdateStoragePoolParams) (*UpdateStor
 }
 
 type UpdateStoragePoolResponse struct {
+	Allocatediops        int64             `json:"allocatediops"`
 	Capacityiops         int64             `json:"capacityiops"`
 	Clusterid            string            `json:"clusterid"`
 	Clustername          string            `json:"clustername"`
@@ -807,11 +830,14 @@ type UpdateStoragePoolResponse struct {
 	Hypervisor           string            `json:"hypervisor"`
 	Id                   string            `json:"id"`
 	Ipaddress            string            `json:"ipaddress"`
+	JobID                string            `json:"jobid"`
+	Jobstatus            int               `json:"jobstatus"`
 	Name                 string            `json:"name"`
 	Overprovisionfactor  string            `json:"overprovisionfactor"`
 	Path                 string            `json:"path"`
 	Podid                string            `json:"podid"`
 	Podname              string            `json:"podname"`
+	Provider             string            `json:"provider"`
 	Scope                string            `json:"scope"`
 	State                string            `json:"state"`
 	Storagecapabilities  map[string]string `json:"storagecapabilities"`

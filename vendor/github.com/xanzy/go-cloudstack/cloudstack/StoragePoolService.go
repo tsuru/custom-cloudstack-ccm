@@ -90,7 +90,7 @@ func (s *StoragePoolService) CancelStorageMaintenance(p *CancelStorageMaintenanc
 }
 
 type CancelStorageMaintenanceResponse struct {
-	JobID                string            `json:"jobid"`
+	Allocatediops        int64             `json:"allocatediops"`
 	Capacityiops         int64             `json:"capacityiops"`
 	Clusterid            string            `json:"clusterid"`
 	Clustername          string            `json:"clustername"`
@@ -101,11 +101,14 @@ type CancelStorageMaintenanceResponse struct {
 	Hypervisor           string            `json:"hypervisor"`
 	Id                   string            `json:"id"`
 	Ipaddress            string            `json:"ipaddress"`
+	JobID                string            `json:"jobid"`
+	Jobstatus            int               `json:"jobstatus"`
 	Name                 string            `json:"name"`
 	Overprovisionfactor  string            `json:"overprovisionfactor"`
 	Path                 string            `json:"path"`
 	Podid                string            `json:"podid"`
 	Podname              string            `json:"podname"`
+	Provider             string            `json:"provider"`
 	Scope                string            `json:"scope"`
 	State                string            `json:"state"`
 	Storagecapabilities  map[string]string `json:"storagecapabilities"`
@@ -184,7 +187,7 @@ func (s *StoragePoolService) EnableStorageMaintenance(p *EnableStorageMaintenanc
 }
 
 type EnableStorageMaintenanceResponse struct {
-	JobID                string            `json:"jobid"`
+	Allocatediops        int64             `json:"allocatediops"`
 	Capacityiops         int64             `json:"capacityiops"`
 	Clusterid            string            `json:"clusterid"`
 	Clustername          string            `json:"clustername"`
@@ -195,11 +198,14 @@ type EnableStorageMaintenanceResponse struct {
 	Hypervisor           string            `json:"hypervisor"`
 	Id                   string            `json:"id"`
 	Ipaddress            string            `json:"ipaddress"`
+	JobID                string            `json:"jobid"`
+	Jobstatus            int               `json:"jobstatus"`
 	Name                 string            `json:"name"`
 	Overprovisionfactor  string            `json:"overprovisionfactor"`
 	Path                 string            `json:"path"`
 	Podid                string            `json:"podid"`
 	Podname              string            `json:"podname"`
+	Provider             string            `json:"provider"`
 	Scope                string            `json:"scope"`
 	State                string            `json:"state"`
 	Storagecapabilities  map[string]string `json:"storagecapabilities"`
@@ -298,6 +304,8 @@ type ListStorageProvidersResponse struct {
 }
 
 type StorageProvider struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
 }

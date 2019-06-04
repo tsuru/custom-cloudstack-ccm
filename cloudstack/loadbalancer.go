@@ -919,12 +919,8 @@ func (lb *loadBalancer) deleteLoadBalancerRule() error {
 // shouldManageIP checks if a IP has the provider tag and the corresponding service tags
 func shouldManageIP(ip cloudstack.PublicIpAddress, service *v1.Service) bool {
 	wantedTags := tagsForService(service)
-	var ipTags []cloudstack.Tag
-	for _, tag := range ip.Tags {
-		ipTags = append(ipTags, cloudstack.Tag(tag))
-	}
 	for tagKey, wantedValue := range wantedTags {
-		value, isTagSet := getTag(ipTags, tagKey)
+		value, isTagSet := getTag(ip.Tags, tagKey)
 		if !isTagSet || wantedValue != value {
 			glog.V(3).Infof("should NOT manage IP %s/%s. Expected value for tag %q: %q, got: %q.", ip.Id, ip.Ipaddress, tagKey, wantedValue, value)
 			return false
@@ -940,12 +936,8 @@ func shouldManageLB(lb *loadBalancer, service *v1.Service) (bool, error) {
 	}
 	wantedTags := tagsForService(service)
 	optionalTags := map[string]struct{}{namespaceTag: {}}
-	var lbTags []cloudstack.Tag
-	for _, tag := range lb.rule.Tags {
-		lbTags = append(lbTags, cloudstack.Tag(tag))
-	}
 	for tagKey, wantedValue := range wantedTags {
-		value, isTagSet := getTag(lbTags, tagKey)
+		value, isTagSet := getTag(lb.rule.Tags, tagKey)
 		if _, isOptional := optionalTags[tagKey]; isOptional && !isTagSet {
 			continue
 		}
@@ -972,7 +964,7 @@ func (lb *loadBalancer) hasMissingTags() (bool, error) {
 	return false, nil
 }
 
-func getTag(tags []cloudstack.Tag, k string) (string, bool) {
+func getTag(tags []cloudstack.Tags, k string) (string, bool) {
 	for _, tag := range tags {
 		if tag.Key == k {
 			return tag.Value, true
@@ -1173,7 +1165,7 @@ func symmetricDifference(hostIDs []string, lbInstances []*cloudstack.VirtualMach
 
 func waitJob(client *cloudstack.CloudStackClient, jobID string, results ...interface{}) error {
 	pa := &cloudstack.QueryAsyncJobResultParams{}
-	pa.SetJobid(jobID)
+	pa.SetJobID(jobID)
 	data, err := client.GetAsyncJobResult(jobID, asyncJobWaitTimeout)
 	if err != nil {
 		return err
