@@ -647,6 +647,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						client:          cloudstack.NewAsyncClient(srv.URL, "a", "b", true),
 					},
 				},
+				svcLock: &serviceLock{},
 			}
 			if tt.hook != nil {
 				tt.hook(t, srv)

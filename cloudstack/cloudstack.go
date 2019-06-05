@@ -102,6 +102,12 @@ type CSCloud struct {
 
 	// Custom command to be used to assign multiple networks to a LB
 	customAssignNetworksCommand string
+
+	// Lock used to prevent parallel calls to UpdateLoadBalancer and
+	// EnsureLoadBalancer. See kubernetes/kubernetes#53462 (closed but not
+	// solved) and kubernetes/kubernetes#55336 (this last one was reverted as
+	// of kubernetes 1.14)
+	svcLock *serviceLock
 }
 
 func init() {
@@ -153,6 +159,7 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		customAssignNetworksCommand: cfg.Command.AssignNetworks,
 		customDisassociateIPCommand: cfg.Command.DisassociateIP,
 		environments:                make(map[string]CSEnvironment),
+		svcLock:                     &serviceLock{},
 	}
 
 	for k, v := range cfg.Environment {

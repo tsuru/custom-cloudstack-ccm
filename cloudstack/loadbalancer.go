@@ -79,6 +79,8 @@ func (ip cloudstackIP) isValid() bool {
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
 func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1.LoadBalancerStatus, bool, error) {
 	glog.V(5).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
+	cs.svcLock.Lock(service)
+	defer cs.svcLock.Unlock(service)
 
 	// Get the load balancer details and existing rules.
 	lb, err := cs.getLoadBalancer(service, "", nil)
@@ -102,6 +104,8 @@ func (cs *CSCloud) GetLoadBalancer(clusterName string, service *v1.Service) (*v1
 // EnsureLoadBalancer creates a new load balancer, or updates the existing one. Returns the status of the balancer.
 func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, nodes []*v1.Node) (status *v1.LoadBalancerStatus, err error) {
 	glog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, service.Spec.Ports, nodes)
+	cs.svcLock.Lock(service)
+	defer cs.svcLock.Unlock(service)
 
 	if len(service.Spec.Ports) == 0 {
 		return nil, fmt.Errorf("requested load balancer with no ports")
@@ -205,6 +209,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 // UpdateLoadBalancer updates hosts under the specified load balancer.
 func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, nodes []*v1.Node) error {
 	glog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
+	cs.svcLock.Lock(service)
+	defer cs.svcLock.Unlock(service)
 
 	nodes = cs.filterNodesMatchingLabels(nodes, *service)
 
@@ -239,6 +245,8 @@ func (cs *CSCloud) UpdateLoadBalancer(clusterName string, service *v1.Service, n
 // nil if the load balancer specified either didn't exist or was successfully deleted.
 func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Service) error {
 	glog.V(5).Infof("EnsureLoadBalancerDeleted(%v, %v, %v)", clusterName, service.Namespace, service.Name)
+	cs.svcLock.Lock(service)
+	defer cs.svcLock.Unlock(service)
 
 	// Get the load balancer details and existing rules.
 	lb, err := cs.getLoadBalancer(service, "", nil)
