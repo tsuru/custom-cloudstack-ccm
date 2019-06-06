@@ -22,7 +22,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"strings"
 	"time"
@@ -165,9 +164,6 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		if v.APIURL == "" || v.APIKey == "" || v.SecretKey == "" {
 			return nil, fmt.Errorf("missing credentials for environment %q", k)
 		}
-		jar, _ := cookiejar.New(nil)
-		csCli := cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify)
-		csCli.AsyncTimeout(asyncJobWaitTimeout)
 		baseTransport := &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout:   30 * time.Second,
@@ -179,11 +175,14 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
-		csCli.HTTPClient(&http.Client{
-			Jar:       jar,
-			Transport: transport.DebugWrappers(baseTransport),
-			Timeout:   60 * time.Second,
-		})
+		opts := []cloudstack.ClientOption{
+			cloudstack.WithAsyncTimeout(asyncJobWaitTimeout),
+			cloudstack.WithHTTPClient(&http.Client{
+				Transport: transport.DebugWrappers(baseTransport),
+				Timeout:   60 * time.Second,
+			}),
+		}
+		csCli := cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify, opts...)
 		cs.environments[k] = CSEnvironment{
 			lbEnvironmentID: v.LBEnvironmentID,
 			lbDomain:        v.LBDomain,

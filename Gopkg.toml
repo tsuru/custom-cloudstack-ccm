@@ -17,8 +17,7 @@
 
 [[constraint]]
   name = "github.com/xanzy/go-cloudstack"
-  source = "github.com/cezarsa/go-cloudstack"
-  branch = "customhttpclient"
+  branch = "master"
 
 [[constraint]]
   name = "gopkg.in/gcfg.v1"
