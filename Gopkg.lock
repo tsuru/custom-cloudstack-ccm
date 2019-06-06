@@ -444,7 +444,8 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:b2b347f89492ba307567bdf1acd022bb15d13e810052a7d6c5feaef70fbf22df"
+  branch = "feature/user_vars"
+  digest = "1:e0aedb89e8d44a9af968e07637e0f12114099c794d7d8fa2f78690deca13dadf"
   name = "gopkg.in/gcfg.v1"
   packages = [
     ".",
@@ -453,8 +454,8 @@
     "types",
   ]
   pruneopts = "NUT"
-  revision = "f02745ab41b9d54a9d495f3356e76f7396da404c"
-  version = "v1.2.2"
+  revision = "52c35a4c7cec0763cc733927972ab235e9c91b18"
+  source = "github.com/go-gcfg/gcfg"
 
 [[projects]]
   digest = "1:2d1fbdc6777e5408cabeb02bf336305e724b925ff4546ded0fa8715a7267922a"
@@ -820,6 +821,7 @@
     "k8s.io/apiserver/pkg/util/logs",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/fake",
+    "k8s.io/client-go/transport",
     "k8s.io/kubernetes/cmd/cloud-controller-manager/app",
     "k8s.io/kubernetes/cmd/cloud-controller-manager/app/options",
     "k8s.io/kubernetes/pkg/client/metrics/prometheus",

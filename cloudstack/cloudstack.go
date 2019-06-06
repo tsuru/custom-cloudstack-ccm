@@ -44,27 +44,55 @@ var (
 
 // CSConfig wraps the config for the CloudStack cloud provider.
 type CSConfig struct {
-	Global struct {
-		ServiceFilterLabel string `gcfg:"service-label"`
-		NodeFilterLabel    string `gcfg:"node-label"`
-		NodeNameLabel      string `gcfg:"node-name-label"`
-		ProjectIDLabel     string `gcfg:"project-id-label"`
-		EnvironmentLabel   string `gcfg:"environment-label"`
-	} `gcfg:"global"`
-	Environment map[string]*struct {
-		APIURL          string `gcfg:"api-url"`
-		APIKey          string `gcfg:"api-key"`
-		SecretKey       string `gcfg:"secret-key"`
-		SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
-		LBEnvironmentID string `gcfg:"lb-environment-id"`
-		LBDomain        string `gcfg:"lb-domain"`
-		RemoveLBs       bool   `gcfg:"remove-lbs-on-delete"`
-	} `gcfg:"environment"`
-	Command struct {
-		AssociateIP    string `gcfg:"associate-ip"`
-		DisassociateIP string `gcfg:"disassociate-ip"`
-		AssignNetworks string `gcfg:"assign-networks"`
-	} `gcfg:"custom-command"`
+	Global      globalConfig                  `gcfg:"global"`
+	Environment map[string]*environmentConfig `gcfg:"environment"`
+	Command     commandConfig                 `gcfg:"custom-command"`
+	CommandArgs map[string]*commandArgsConfig `gcfg:"custom-command-args"`
+}
+
+type globalConfig struct {
+	ServiceFilterLabel string `gcfg:"service-label"`
+	NodeFilterLabel    string `gcfg:"node-label"`
+	NodeNameLabel      string `gcfg:"node-name-label"`
+	ProjectIDLabel     string `gcfg:"project-id-label"`
+	EnvironmentLabel   string `gcfg:"environment-label"`
+}
+
+type environmentConfig struct {
+	APIURL          string `gcfg:"api-url"`
+	APIKey          string `gcfg:"api-key"`
+	SecretKey       string `gcfg:"secret-key"`
+	SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
+	LBEnvironmentID string `gcfg:"lb-environment-id"`
+	LBDomain        string `gcfg:"lb-domain"`
+	RemoveLBs       bool   `gcfg:"remove-lbs-on-delete"`
+}
+
+type commandConfig struct {
+	AssociateIP    string `gcfg:"associate-ip"`
+	DisassociateIP string `gcfg:"disassociate-ip"`
+	AssignNetworks string `gcfg:"assign-networks"`
+	DeleteLBRule   string `gcfg:"delete-lb-rule"`
+}
+
+type commandArgsConfig struct {
+	gcfg.Idxer
+	Vals map[gcfg.Idx]*string
+}
+
+func (c *commandArgsConfig) ToMap() map[string]string {
+	result := map[string]string{}
+	if c == nil {
+		return result
+	}
+	keys := c.Names()
+	for _, k := range keys {
+		value := c.Vals[c.Idx(k)]
+		if value != nil {
+			result[k] = *value
+		}
+	}
+	return result
 }
 
 type CSEnvironment struct {
@@ -78,30 +106,8 @@ type CSEnvironment struct {
 // CSCloud is an implementation of Interface for CloudStack.
 type CSCloud struct {
 	environments map[string]CSEnvironment
-
-	// environmentLabel used to figure out the resource CS environment
-	environmentLabel string
-
-	kubeClient kubernetes.Interface
-
-	// Labels used to match services to nodes
-	serviceLabel string
-	nodeLabel    string
-
-	// Node label that contains the virtual machine name used to match with cloudstack
-	nodeNameLabel string
-
-	// label that contains the project ID of the given resource
-	projectIDLabel string
-
-	// Custom command to be used to associate an IP to a LB
-	customAssociateIPCommand string
-
-	// Custom command to be used to disassociate an IP from a LB
-	customDisassociateIPCommand string
-
-	// Custom command to be used to assign multiple networks to a LB
-	customAssignNetworksCommand string
+	kubeClient   kubernetes.Interface
+	config       CSConfig
 
 	// Lock used to prevent parallel calls to UpdateLoadBalancer and
 	// EnsureLoadBalancer. See kubernetes/kubernetes#53462 (closed but not
@@ -150,16 +156,9 @@ func readConfig(config io.Reader) (*CSConfig, error) {
 // newCSCloud creates a new instance of CSCloud.
 func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 	cs := &CSCloud{
-		serviceLabel:                cfg.Global.ServiceFilterLabel,
-		nodeLabel:                   cfg.Global.NodeFilterLabel,
-		nodeNameLabel:               cfg.Global.NodeNameLabel,
-		projectIDLabel:              cfg.Global.ProjectIDLabel,
-		environmentLabel:            cfg.Global.EnvironmentLabel,
-		customAssociateIPCommand:    cfg.Command.AssociateIP,
-		customAssignNetworksCommand: cfg.Command.AssignNetworks,
-		customDisassociateIPCommand: cfg.Command.DisassociateIP,
-		environments:                make(map[string]CSEnvironment),
-		svcLock:                     &serviceLock{},
+		environments: make(map[string]CSEnvironment),
+		svcLock:      &serviceLock{},
+		config:       *cfg,
 	}
 
 	for k, v := range cfg.Environment {

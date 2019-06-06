@@ -23,7 +23,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/cloudprovider"
@@ -242,11 +242,11 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 
 func (cs *CSCloud) newNode(kubeNode *v1.Node) (*node, error) {
 	name := kubeNode.Name
-	if n, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.nodeNameLabel); ok {
+	if n, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.config.Global.NodeNameLabel); ok {
 		name = n
 	}
-	environment, _ := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.environmentLabel)
-	projectID, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.projectIDLabel)
+	environment, _ := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.config.Global.EnvironmentLabel)
+	projectID, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.config.Global.ProjectIDLabel)
 	if !ok {
 		return nil, fmt.Errorf("failed to retrieve projectID from node %#v", kubeNode)
 	}

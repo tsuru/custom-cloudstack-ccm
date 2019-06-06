@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xanzy/go-cloudstack/cloudstack"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/kubernetes/pkg/cloudprovider"
@@ -47,8 +47,12 @@ func TestCSCloudGetZoneByNodeName(t *testing.T) {
 	}))
 	defer srv.Close()
 	cs := &CSCloud{
-		kubeClient:     kubeCli,
-		projectIDLabel: "projid",
+		kubeClient: kubeCli,
+		config: CSConfig{
+			Global: globalConfig{
+				ProjectIDLabel: "projid",
+			},
+		},
 		environments: map[string]CSEnvironment{
 			"": CSEnvironment{
 				client: cloudstack.NewAsyncClient(srv.URL, "", "", true),
@@ -84,9 +88,13 @@ func TestCSCloudGetZoneByProviderID(t *testing.T) {
 	}))
 	defer srv.Close()
 	cs := &CSCloud{
-		kubeClient:     kubeCli,
-		projectIDLabel: "projid",
-		nodeNameLabel:  "nodename",
+		kubeClient: kubeCli,
+		config: CSConfig{
+			Global: globalConfig{
+				ProjectIDLabel: "projid",
+				NodeNameLabel:  "nodename",
+			},
+		},
 		environments: map[string]CSEnvironment{
 			"": CSEnvironment{
 				client: cloudstack.NewAsyncClient(srv.URL, "", "", true),

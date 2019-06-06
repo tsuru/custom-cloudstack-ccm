@@ -636,10 +636,16 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			srv := cloudstackFake.NewCloudstackServer()
 			defer srv.Close()
 			csCloud := &CSCloud{
-				environmentLabel:            "environment-label",
-				projectIDLabel:              "project-label",
-				kubeClient:                  fake.NewSimpleClientset(),
-				customAssignNetworksCommand: "assignNetworkToLBRule",
+				config: CSConfig{
+					Global: globalConfig{
+						EnvironmentLabel: "environment-label",
+						ProjectIDLabel:   "project-label",
+					},
+					Command: commandConfig{
+						AssignNetworks: "assignNetworkToLBRule",
+					},
+				},
+				kubeClient: fake.NewSimpleClientset(),
 				environments: map[string]CSEnvironment{
 					"env1": {
 						lbEnvironmentID: "1",
@@ -685,9 +691,23 @@ func TestFilterNodesMatchingLabels(t *testing.T) {
 		service       corev1.Service
 		expectedNodes []*v1.Node
 	}{
-		{"matchSingle", CSCloud{serviceLabel: "app-pool", nodeLabel: "pool"}, s1, nodes[0:1]},
+		{"matchSingle", CSCloud{
+			config: CSConfig{
+				Global: globalConfig{
+					ServiceFilterLabel: "app-pool",
+					NodeFilterLabel:    "pool",
+				},
+			},
+		}, s1, nodes[0:1]},
 		{"emptyLabels", CSCloud{}, s1, nodes},
-		{"matchMultiple", CSCloud{serviceLabel: "app-pool", nodeLabel: "pool"}, s2, nodes[1:3]},
+		{"matchMultiple", CSCloud{
+			config: CSConfig{
+				Global: globalConfig{
+					ServiceFilterLabel: "app-pool",
+					NodeFilterLabel:    "pool",
+				},
+			},
+		}, s2, nodes[1:3]},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -781,6 +801,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Id:          "id-1",
 					Publicport:  "2",
 					Privateport: "20",
 					Tags: []cloudstack.Tags{

@@ -21,6 +21,11 @@
   branch = "customhttpclient"
 
 [[constraint]]
+  name = "gopkg.in/gcfg.v1"
+  source = "github.com/go-gcfg/gcfg"
+  branch = "feature/user_vars"
+
+[[constraint]]
   name = "k8s.io/client-go"
   version = "kubernetes-1.8.12"
 [[override]]

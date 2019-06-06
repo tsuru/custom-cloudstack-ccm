@@ -164,8 +164,8 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	status = &v1.LoadBalancerStatus{}
 	status.Ingress = []v1.LoadBalancerIngress{{IP: lb.ip.address, Hostname: lb.name}}
 
-	if lb.cloud.projectID != "" && service.Labels[cs.projectIDLabel] == "" {
-		service.Labels[cs.projectIDLabel] = lb.cloud.projectID
+	if lb.cloud.projectID != "" && service.Labels[cs.config.Global.ProjectIDLabel] == "" {
+		service.Labels[cs.config.Global.ProjectIDLabel] = lb.cloud.projectID
 	}
 
 	// If the load balancer rule exists and is up-to-date, we move on to the next rule.
@@ -293,12 +293,12 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(clusterName string, service *v1.Ser
 func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networkIDs []string) (*loadBalancer, error) {
 	if projectID == "" {
 		var ok bool
-		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.projectIDLabel)
+		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.ProjectIDLabel)
 		if !ok {
 			glog.V(4).Infof("unable to retrive projectID for service: %#v", service)
 		}
 	}
-	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
+	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
 	lb := &loadBalancer{
 		cloud: &projectCloud{
 			CSCloud:     cs,
@@ -369,16 +369,16 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 	}
 	hostNames := map[string]bool{}
 	for _, node := range nodes {
-		if name, ok := getLabelOrAnnotation(node.ObjectMeta, cs.nodeNameLabel); ok {
+		if name, ok := getLabelOrAnnotation(node.ObjectMeta, cs.config.Global.NodeNameLabel); ok {
 			hostNames[name] = true
 			continue
 		}
 		hostNames[node.Name] = true
 	}
 
-	environmentID, _ := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.environmentLabel)
+	environmentID, _ := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.config.Global.EnvironmentLabel)
 
-	projectID, ok := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.projectIDLabel)
+	projectID, ok := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.config.Global.ProjectIDLabel)
 	if !ok {
 		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %#v", nodes[0])
 	}
@@ -425,14 +425,14 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 }
 
 func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Service) []*v1.Node {
-	if cs.serviceLabel == "" || cs.nodeLabel == "" {
+	if cs.config.Global.ServiceFilterLabel == "" || cs.config.Global.NodeFilterLabel == "" {
 		return nodes
 	}
-	labelValue, _ := getLabelOrAnnotation(service.ObjectMeta, cs.serviceLabel)
+	labelValue, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.ServiceFilterLabel)
 
 	var filteredNodes []*v1.Node
 	for i := range nodes {
-		nodeLabelValue, _ := getLabelOrAnnotation(nodes[i].ObjectMeta, cs.nodeLabel)
+		nodeLabelValue, _ := getLabelOrAnnotation(nodes[i].ObjectMeta, cs.config.Global.NodeFilterLabel)
 		if nodeLabelValue != labelValue {
 			continue
 		}
@@ -449,7 +449,7 @@ func (cs *CSCloud) getLoadBalancerName(service v1.Service) string {
 	if ok {
 		return name
 	}
-	environment, ok := getLabelOrAnnotation(service.ObjectMeta, cs.environmentLabel)
+	environment, ok := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
 	if !ok {
 		return cloudprovider.GetLoadBalancerName(&service)
 	}
@@ -704,7 +704,7 @@ func (pc *projectCloud) associatePublicIPAddress(service *v1.Service, networkID 
 	}
 
 	var result cloudstack.AssociateIpAddressResponse
-	associateCommand := pc.customAssociateIPCommand
+	associateCommand := pc.config.Command.AssociateIP
 	if associateCommand == "" {
 		associateCommand = "associateIpAddress"
 	}
@@ -743,7 +743,7 @@ func (pc *projectCloud) releaseLoadBalancerIP(ip cloudstackIP) error {
 		params.SetParam("projectid", pc.projectID)
 	}
 
-	disassociateCommand := pc.customDisassociateIPCommand
+	disassociateCommand := pc.config.Command.DisassociateIP
 	if disassociateCommand == "" {
 		disassociateCommand = "disassociateIpAddress"
 	}
@@ -908,11 +908,31 @@ func (lb *loadBalancer) deleteLoadBalancerRule() error {
 	if err != nil {
 		return err
 	}
-	p := client.LoadBalancer.NewDeleteLoadBalancerRuleParams(lb.rule.Id)
 
-	if _, err := client.LoadBalancer.DeleteLoadBalancerRule(p); err != nil {
+	deleteLBCommand := lb.cloud.config.Command.DeleteLBRule
+	if deleteLBCommand == "" {
+		deleteLBCommand = "deleteLoadBalancerRule"
+	}
+
+	p := &cloudstack.CustomServiceParams{}
+	p.SetParam("id", lb.rule.Id)
+	for k, v := range lb.cloud.config.CommandArgs[deleteLBCommand].ToMap() {
+		p.SetParam(k, v)
+	}
+
+	var result cloudstack.DeleteLoadBalancerRuleResponse
+	err = client.Custom.CustomRequest(deleteLBCommand, p, &result)
+	if err != nil {
 		return fmt.Errorf("error deleting load balancer rule %v: %v", lb.rule.Id, err)
 	}
+
+	if result.JobID != "" {
+		err = waitJob(client, result.JobID, nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	lb.rule = nil
 	return nil
 }
@@ -1053,7 +1073,7 @@ func (lb *loadBalancer) assignHostsToRule(lbRule *loadBalancerRule, hostIDs []st
 
 // assignNetworksToRule assigns networks to a load balancer rule.
 func (lb *loadBalancer) assignNetworksToRule(lbRule *loadBalancerRule, networkIDs []string) error {
-	if lb.cloud.customAssignNetworksCommand == "" {
+	if lb.cloud.config.Command.AssignNetworks == "" {
 		return nil
 	}
 	for i := range networkIDs {
@@ -1079,8 +1099,8 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 	var result struct {
 		JobID string `json:"jobid"`
 	}
-	if err := client.Custom.CustomRequest(lb.cloud.customAssignNetworksCommand, p, &result); err != nil {
-		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Name, lb.cloud.customAssignNetworksCommand, err)
+	if err := client.Custom.CustomRequest(lb.cloud.config.Command.AssignNetworks, p, &result); err != nil {
+		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Name, lb.cloud.config.Command.AssignNetworks, err)
 	}
 	if result.JobID != "" {
 		glog.V(4).Infof("Querying async job %s for load balancer rule %s", result.JobID, lbRule.Id)

@@ -183,6 +183,7 @@ func readIntoPass(c *warnings.Collector, config interface{}, fset *token.FileSet
 			}
 		}
 	}
+	panic("never reached")
 }
 
 func readInto(config interface{}, fset *token.FileSet, file *token.File,

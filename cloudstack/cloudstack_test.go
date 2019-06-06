@@ -18,6 +18,7 @@ package cloudstack
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -57,6 +58,11 @@ func TestReadConfig(t *testing.T) {
  [custom-command]
  associate-ip = acquireIP
  assign-networks = assignNetworks
+
+ [custom-command-args "acquireIP"]
+ a = b
+ c = d
+
  `))
 	if err != nil {
 		t.Fatalf("Should succeed when a valid config is provided: %v", err)
@@ -117,6 +123,21 @@ func TestReadConfig(t *testing.T) {
 	}
 	if cfg.Command.AssignNetworks != "assignNetworks" {
 		t.Errorf("incorrect assign-networks: %s", cfg.Command.AssignNetworks)
+	}
+	if cfg.CommandArgs == nil {
+		t.Errorf("unexpected nil CommandArgs")
+	}
+	invalidResultMap := cfg.CommandArgs["invalid-entry"].ToMap()
+	if !reflect.DeepEqual(invalidResultMap, map[string]string{}) {
+		t.Errorf("incorrect value for invalid entry: %#v", invalidResultMap)
+	}
+	resultMap := cfg.CommandArgs["acquireIP"].ToMap()
+	argsEqual := reflect.DeepEqual(resultMap, map[string]string{
+		"a": "b",
+		"c": "d",
+	})
+	if !argsEqual {
+		t.Errorf("incorrect value for acquireIP command args: %#v", resultMap)
 	}
 }
 
