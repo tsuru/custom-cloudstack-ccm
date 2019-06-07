@@ -16,7 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 )
 
 func init() {
@@ -635,31 +634,29 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := cloudstackFake.NewCloudstackServer()
 			defer srv.Close()
-			csCloud := &CSCloud{
-				config: CSConfig{
-					Global: globalConfig{
-						EnvironmentLabel: "environment-label",
-						ProjectIDLabel:   "project-label",
-					},
-					Command: commandConfig{
-						AssignNetworks: "assignNetworkToLBRule",
-					},
+			csCloud, err := newCSCloud(&CSConfig{
+				Global: globalConfig{
+					EnvironmentLabel: "environment-label",
+					ProjectIDLabel:   "project-label",
 				},
-				kubeClient: fake.NewSimpleClientset(),
-				environments: map[string]CSEnvironment{
+				Command: commandConfig{
+					AssignNetworks: "assignNetworkToLBRule",
+				},
+				Environment: map[string]*environmentConfig{
 					"env1": {
-						lbEnvironmentID: "1",
-						lbDomain:        "test.com",
-						client:          cloudstack.NewAsyncClient(srv.URL, "a", "b", true),
+						APIURL:          srv.URL,
+						APIKey:          "a",
+						SecretKey:       "b",
+						LBEnvironmentID: "1",
+						LBDomain:        "test.com",
 					},
 				},
-				svcLock: &serviceLock{},
-			}
+			})
+			require.Nil(t, err)
 			if tt.hook != nil {
 				tt.hook(t, srv)
 			}
 			var lbStatus *corev1.LoadBalancerStatus
-			var err error
 			for i, cc := range tt.calls {
 				t.Logf("call %d", i)
 				svc := cc.svc.DeepCopy()
