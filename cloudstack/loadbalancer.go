@@ -365,6 +365,9 @@ func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID 
 	if count > 1 {
 		return nil, fmt.Errorf("lb %q too many rules associated: %#v", lbName, result.LoadBalancerRules)
 	}
+	if count == 0 {
+		return nil, nil
+	}
 	return lbResult, nil
 }
 
