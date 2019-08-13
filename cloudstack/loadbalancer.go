@@ -346,7 +346,6 @@ func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID 
 		Count             int                 `json:"count"`
 		LoadBalancerRules []*loadBalancerRule `json:"loadbalancerrule"`
 	}
-	var lbResult *loadBalancerRule
 
 	err := client.Custom.CustomRequest("listLoadBalancerRules", pc, &result)
 	if err != nil {
@@ -355,10 +354,13 @@ func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID 
 	if result.Count == 0 {
 		return nil, nil
 	}
-	count := 0
-	for idx := range result.LoadBalancerRules {
-		if result.LoadBalancerRules[idx].Name == lbName {
-			lbResult = result.LoadBalancerRules[idx]
+
+	var count int
+	var lbResult *loadBalancerRule
+
+	for _, lbRule := range result.LoadBalancerRules {
+		if lbRule.Name == lbName {
+			lbResult = lbRule
 			count++
 		}
 	}
