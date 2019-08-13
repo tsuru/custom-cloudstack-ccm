@@ -351,14 +351,26 @@ func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID 
 	if err != nil {
 		return nil, err
 	}
-	if result.Count > 1 {
-		return nil, fmt.Errorf("lb %q too many rules associated: %#v", lbName, result.LoadBalancerRules)
-	}
 	if result.Count == 0 {
 		return nil, nil
 	}
 
-	return result.LoadBalancerRules[0], nil
+	var count int
+	var lbResult *loadBalancerRule
+
+	for _, lbRule := range result.LoadBalancerRules {
+		if lbRule.Name == lbName {
+			lbResult = lbRule
+			count++
+		}
+	}
+	if count > 1 {
+		return nil, fmt.Errorf("lb %q too many rules associated: %#v", lbName, result.LoadBalancerRules)
+	}
+	if count == 0 {
+		return nil, nil
+	}
+	return lbResult, nil
 }
 
 // extractIDs extracts the VM ID for each node, their unique network IDs and project ID

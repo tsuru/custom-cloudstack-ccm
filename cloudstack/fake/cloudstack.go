@@ -69,6 +69,10 @@ func (s *CloudstackServer) AddIP(ip cloudstack.PublicIpAddress) {
 	s.ips[ip.Id] = &ip
 }
 
+func (s *CloudstackServer) AddLBRule(lbName string, lbRule loadBalancerRule) {
+	s.lbRules[lbName] = lbRule
+}
+
 func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cmd := r.FormValue("command")
 	s.Calls = append(s.Calls, MockAPICall{
@@ -86,7 +90,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		keyword := r.FormValue("keyword")
 		var lbs []loadBalancerRule
 		for _, lb := range s.lbRules {
-			if lb["name"] == keyword || lb["id"] == keyword {
+			if strings.Contains(lb["name"].(string), keyword) || strings.Contains(lb["id"].(string), keyword) {
 				lb["tags"] = s.tags[lb["id"].(string)]
 				lbs = append(lbs, lb)
 			}
