@@ -32,7 +32,8 @@ import (
 )
 
 const (
-	lbNameLabel = "csccm.cloudprovider.io/loadbalancer-name"
+	lbNameLabel  = "csccm.cloudprovider.io/loadbalancer-name"
+	lbNameSuffix = "csccm.cloudprovider.io/loadbalancer-name-suffix"
 
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
@@ -460,6 +461,10 @@ func (cs *CSCloud) getLoadBalancerName(service v1.Service) string {
 	name, ok := getLabelOrAnnotation(service.ObjectMeta, lbNameLabel)
 	if ok {
 		return name
+	}
+	suffix, ok := getLabelOrAnnotation(service.ObjectMeta, lbNameSuffix)
+	if ok {
+		return fmt.Sprintf("%s.%s", service.Name, suffix)
 	}
 	environment, ok := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
 	if !ok {
