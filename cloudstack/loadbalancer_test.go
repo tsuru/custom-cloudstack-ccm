@@ -1,7 +1,6 @@
 package cloudstack
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -186,8 +185,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						extraParams, _ := json.Marshal(map[string]string{"foo": "bar", "lbenvironmentid": "3"})
-						svc.Annotations["csccm.cloudprovider.io/associateipaddress-extra-params"] = string(extraParams)
+						svc.Labels["csccm.cloudprovider.io/associateipaddress-extra-param-foo"] = "bar"
+						svc.Annotations["csccm.cloudprovider.io/associateipaddress-extra-param-lbenvironmentid"] = "3"
 						return *svc
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
@@ -235,8 +234,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						extraParams, _ := json.Marshal(map[string]string{"dsr": "true"})
-						svc.Annotations["csccm.cloudprovider.io/createloadbalancer-extra-params"] = string(extraParams)
+						svc.Annotations["csccm.cloudprovider.io/createloadbalancer-extra-param-dsr"] = "true"
 						return *svc
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {

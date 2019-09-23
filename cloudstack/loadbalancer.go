@@ -35,8 +35,8 @@ const (
 	lbNameLabel  = "csccm.cloudprovider.io/loadbalancer-name"
 	lbNameSuffix = "csccm.cloudprovider.io/loadbalancer-name-suffix"
 
-	associateIPAddressExtraParams = "csccm.cloudprovider.io/associateipaddress-extra-params"
-	createLoadBalancerExtraParams = "csccm.cloudprovider.io/createloadbalancer-extra-params"
+	associateIPAddressExtraParamPrefix = "csccm.cloudprovider.io/associateipaddress-extra-param-"
+	createLoadBalancerExtraParamPrefix = "csccm.cloudprovider.io/createloadbalancer-extra-param-"
 
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
@@ -729,10 +729,7 @@ func (pc *projectCloud) associatePublicIPAddress(service *v1.Service, networkID 
 		associateCommand = "associateIpAddress"
 	}
 
-	err = setExtraParams(service, associateIPAddressExtraParams, params)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing %q for extra params: %v", associateIPAddressExtraParams, err)
-	}
+	setExtraParams(service, associateIPAddressExtraParamPrefix, params)
 
 	err = client.Custom.CustomRequest(associateCommand, params, &result)
 	if err != nil {
@@ -898,10 +895,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	// Do not create corresponding firewall rule.
 	p.SetParam("openfirewall", false)
 
-	err = setExtraParams(service, createLoadBalancerExtraParams, p)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing %q for extra params: %v", createLoadBalancerExtraParams, err)
-	}
+	setExtraParams(service, createLoadBalancerExtraParamPrefix, p)
 
 	// Create a new load balancer rule.
 	r := cloudstack.CreateLoadBalancerRuleResponse{}
@@ -1191,19 +1185,18 @@ func (pc *projectCloud) getLBEnvironmentID() string {
 	return pc.environments[pc.environment].lbEnvironmentID
 }
 
-func setExtraParams(service *v1.Service, labelOrAnnotation string, params *cloudstack.CustomServiceParams) error {
-	metadata, ok := getLabelOrAnnotation(service.ObjectMeta, labelOrAnnotation)
-	if ok {
-		var extraParams map[string]string
-		err := json.Unmarshal([]byte(metadata), &extraParams)
-		if err != nil {
-			return err
-		}
-		for key, value := range extraParams {
-			params.SetParam(key, value)
+func setExtraParams(service *v1.Service, prefix string, params *cloudstack.CustomServiceParams) {
+	for key, value := range service.ObjectMeta.Annotations {
+		if strings.HasPrefix(key, prefix) {
+			params.SetParam(strings.TrimPrefix(key, prefix), value)
 		}
 	}
-	return nil
+
+	for key, value := range service.ObjectMeta.Labels {
+		if strings.HasPrefix(key, prefix) {
+			params.SetParam(strings.TrimPrefix(key, prefix), value)
+		}
+	}
 }
 
 // symmetricDifference returns the symmetric difference between the old (existing) and new (wanted) host ID's.
