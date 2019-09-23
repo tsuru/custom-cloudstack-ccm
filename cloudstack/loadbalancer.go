@@ -35,6 +35,9 @@ const (
 	lbNameLabel  = "csccm.cloudprovider.io/loadbalancer-name"
 	lbNameSuffix = "csccm.cloudprovider.io/loadbalancer-name-suffix"
 
+	associateIPAddressExtraParams = "csccm.cloudprovider.io/associateipaddress-extra-params"
+	createLoadBalancerExtraParams = "csccm.cloudprovider.io/createloadbalancer-extra-params"
+
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
 	namespaceTag     = "kubernetes_namespace"
@@ -190,7 +193,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	}
 
 	glog.V(4).Infof("Creating load balancer rule: %v", lb.name)
-	lb.rule, err = lb.createLoadBalancerRule(lb.name, service.Spec.Ports)
+	lb.rule, err = lb.createLoadBalancerRule(lb.name, service)
 	if err != nil {
 		return nil, err
 	}
@@ -725,6 +728,12 @@ func (pc *projectCloud) associatePublicIPAddress(service *v1.Service, networkID 
 	if associateCommand == "" {
 		associateCommand = "associateIpAddress"
 	}
+
+	err = setExtraParams(service, associateIPAddressExtraParams, params)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing %q for extra params: %v", associateIPAddressExtraParams, err)
+	}
+
 	err = client.Custom.CustomRequest(associateCommand, params, &result)
 	if err != nil {
 		return nil, fmt.Errorf("error associate new IP address using endpoint %q: %v", associateCommand, err)
@@ -849,7 +858,8 @@ func (lb *loadBalancer) updateLoadBalancerRule(service *v1.Service) error {
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
-func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.ServicePort) (*loadBalancerRule, error) {
+func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Service) (*loadBalancerRule, error) {
+	ports := service.Spec.Ports
 	client, err := lb.getClient()
 	if err != nil {
 		return nil, err
@@ -887,6 +897,11 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 
 	// Do not create corresponding firewall rule.
 	p.SetParam("openfirewall", false)
+
+	err = setExtraParams(service, createLoadBalancerExtraParams, p)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing %q for extra params: %v", createLoadBalancerExtraParams, err)
+	}
 
 	// Create a new load balancer rule.
 	r := cloudstack.CreateLoadBalancerRuleResponse{}
@@ -1174,6 +1189,21 @@ func (pc *projectCloud) getClient() (*cloudstack.CloudStackClient, error) {
 
 func (pc *projectCloud) getLBEnvironmentID() string {
 	return pc.environments[pc.environment].lbEnvironmentID
+}
+
+func setExtraParams(service *v1.Service, labelOrAnnotation string, params *cloudstack.CustomServiceParams) error {
+	metadata, ok := getLabelOrAnnotation(service.ObjectMeta, labelOrAnnotation)
+	if ok {
+		var extraParams map[string]string
+		err := json.Unmarshal([]byte(metadata), &extraParams)
+		if err != nil {
+			return err
+		}
+		for key, value := range extraParams {
+			params.SetParam(key, value)
+		}
+	}
+	return nil
 }
 
 // symmetricDifference returns the symmetric difference between the old (existing) and new (wanted) host ID's.
