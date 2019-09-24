@@ -35,6 +35,9 @@ const (
 	lbNameLabel  = "csccm.cloudprovider.io/loadbalancer-name"
 	lbNameSuffix = "csccm.cloudprovider.io/loadbalancer-name-suffix"
 
+	associateIPAddressExtraParamPrefix = "csccm.cloudprovider.io/associateipaddress-extra-param-"
+	createLoadBalancerExtraParamPrefix = "csccm.cloudprovider.io/createloadbalancer-extra-param-"
+
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
 	namespaceTag     = "kubernetes_namespace"
@@ -190,7 +193,7 @@ func (cs *CSCloud) EnsureLoadBalancer(clusterName string, service *v1.Service, n
 	}
 
 	glog.V(4).Infof("Creating load balancer rule: %v", lb.name)
-	lb.rule, err = lb.createLoadBalancerRule(lb.name, service.Spec.Ports)
+	lb.rule, err = lb.createLoadBalancerRule(lb.name, service)
 	if err != nil {
 		return nil, err
 	}
@@ -725,6 +728,9 @@ func (pc *projectCloud) associatePublicIPAddress(service *v1.Service, networkID 
 	if associateCommand == "" {
 		associateCommand = "associateIpAddress"
 	}
+
+	setExtraParams(service, associateIPAddressExtraParamPrefix, params)
+
 	err = client.Custom.CustomRequest(associateCommand, params, &result)
 	if err != nil {
 		return nil, fmt.Errorf("error associate new IP address using endpoint %q: %v", associateCommand, err)
@@ -849,7 +855,8 @@ func (lb *loadBalancer) updateLoadBalancerRule(service *v1.Service) error {
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
-func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.ServicePort) (*loadBalancerRule, error) {
+func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Service) (*loadBalancerRule, error) {
+	ports := service.Spec.Ports
 	client, err := lb.getClient()
 	if err != nil {
 		return nil, err
@@ -887,6 +894,8 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, ports []v1.Ser
 
 	// Do not create corresponding firewall rule.
 	p.SetParam("openfirewall", false)
+
+	setExtraParams(service, createLoadBalancerExtraParamPrefix, p)
 
 	// Create a new load balancer rule.
 	r := cloudstack.CreateLoadBalancerRuleResponse{}
@@ -1174,6 +1183,20 @@ func (pc *projectCloud) getClient() (*cloudstack.CloudStackClient, error) {
 
 func (pc *projectCloud) getLBEnvironmentID() string {
 	return pc.environments[pc.environment].lbEnvironmentID
+}
+
+func setExtraParams(service *v1.Service, prefix string, params *cloudstack.CustomServiceParams) {
+	for key, value := range service.ObjectMeta.Annotations {
+		if strings.HasPrefix(key, prefix) {
+			params.SetParam(strings.TrimPrefix(key, prefix), value)
+		}
+	}
+
+	for key, value := range service.ObjectMeta.Labels {
+		if strings.HasPrefix(key, prefix) {
+			params.SetParam(strings.TrimPrefix(key, prefix), value)
+		}
+	}
 }
 
 // symmetricDifference returns the symmetric difference between the old (existing) and new (wanted) host ID's.
