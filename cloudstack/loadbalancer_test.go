@@ -1135,3 +1135,47 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		})
 	}
 }
+
+func Test_listAllIPPages(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		srv := cloudstackFake.NewCloudstackServer()
+		defer srv.Close()
+		csCli := cloudstack.NewAsyncClient(srv.URL, "a", "b", false)
+		ips, err := listAllIPPages(csCli, &cloudstack.ListPublicIpAddressesParams{})
+		require.NoError(t, err)
+		assert.Equal(t, []*cloudstack.PublicIpAddress{}, ips)
+	})
+
+	t.Run("remains safe even with cloudstack weirdness", func(t *testing.T) {
+		srv := cloudstackFake.NewCloudstackServer()
+		defer srv.Close()
+		var pages []string
+		srv.Hook = func(w http.ResponseWriter, r *http.Request) bool {
+			cmd := r.FormValue("command")
+			if cmd == "listPublicIpAddresses" {
+				page := r.FormValue("page")
+				pages = append(pages, page)
+				w.Write([]byte(`{
+"listPublicIpAddressesResponse": {
+	"count": 4,
+	"publicipaddress": [
+		{"id": "id1", "ipaddress": "ip1"},
+		{"id": "id2", "ipaddress": "ip2"},
+		{"id": "id3", "ipaddress": "ip3"}
+	]
+}}`))
+				return true
+			}
+			return false
+		}
+		csCli := cloudstack.NewAsyncClient(srv.URL, "a", "b", false)
+		ips, err := listAllIPPages(csCli, &cloudstack.ListPublicIpAddressesParams{})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"0", "1"}, pages)
+		assert.Equal(t, []*cloudstack.PublicIpAddress{
+			{Id: "id1", Ipaddress: "ip1"},
+			{Id: "id2", Ipaddress: "ip2"},
+			{Id: "id3", Ipaddress: "ip3"},
+		}, ips)
+	})
+}

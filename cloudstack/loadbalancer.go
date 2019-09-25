@@ -1321,10 +1321,21 @@ func listAllIPPages(client *cloudstack.CloudStackClient, params *cloudstack.List
 			return nil, err
 		}
 		result = append(result, l.PublicIpAddresses...)
-		if len(l.PublicIpAddresses) == 0 || l.Count == len(result) {
+		if len(l.PublicIpAddresses) == 0 || len(result) >= l.Count {
 			break
 		}
 		page++
 	}
-	return result, nil
+	// Cloudstack count can be misleading and results can arrive repeated in
+	// multiple pages so to play safe we remove duplicated entries based on ID.
+	existingSet := make(map[string]struct{})
+	uniqResult := make([]*cloudstack.PublicIpAddress, 0, len(result))
+	for _, el := range result {
+		if _, ok := existingSet[el.Id]; ok {
+			continue
+		}
+		existingSet[el.Id] = struct{}{}
+		uniqResult = append(uniqResult, el)
+	}
+	return uniqResult, nil
 }
