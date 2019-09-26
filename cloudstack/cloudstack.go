@@ -60,9 +60,9 @@ type environmentConfig struct {
 	APIURL          string `gcfg:"api-url"`
 	APIKey          string `gcfg:"api-key"`
 	SecretKey       string `gcfg:"secret-key"`
-	SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
 	LBEnvironmentID string `gcfg:"lb-environment-id"`
 	LBDomain        string `gcfg:"lb-domain"`
+	SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
 	RemoveLBs       bool   `gcfg:"remove-lbs-on-delete"`
 }
 

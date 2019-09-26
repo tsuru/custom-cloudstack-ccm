@@ -23,8 +23,6 @@ import (
 	"testing"
 )
 
-const testClusterName = "testCluster"
-
 func TestReadConfig(t *testing.T) {
 	_, err := readConfig(nil)
 	if err != nil {

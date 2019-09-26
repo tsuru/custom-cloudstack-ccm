@@ -1106,7 +1106,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 	fakeCli := cloudstack.NewAsyncClient(srv.URL, "", "", false)
 	cloud := &CSCloud{
 		environments: map[string]CSEnvironment{
-			"test": CSEnvironment{
+			"test": {
 				client: fakeCli,
 			},
 		},

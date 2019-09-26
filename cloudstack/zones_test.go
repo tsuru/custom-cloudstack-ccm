@@ -19,7 +19,7 @@ import (
 func TestCSCloudGetZone(t *testing.T) {
 	cs := &CSCloud{
 		environments: map[string]CSEnvironment{
-			"": CSEnvironment{},
+			"": {},
 		},
 	}
 	zones, implemented := cs.Zones()
@@ -55,7 +55,7 @@ func TestCSCloudGetZoneByNodeName(t *testing.T) {
 			},
 		},
 		environments: map[string]CSEnvironment{
-			"": CSEnvironment{
+			"": {
 				client: cloudstack.NewAsyncClient(srv.URL, "", "", true),
 			},
 		},
@@ -97,7 +97,7 @@ func TestCSCloudGetZoneByProviderID(t *testing.T) {
 			},
 		},
 		environments: map[string]CSEnvironment{
-			"": CSEnvironment{
+			"": {
 				client: cloudstack.NewAsyncClient(srv.URL, "", "", true),
 			},
 		},
