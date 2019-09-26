@@ -1,6 +1,7 @@
 package cloudstack
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -909,7 +910,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				if err == nil && lbStatus != nil {
 					svc.Status.LoadBalancer = *lbStatus
 				}
-				lbStatus, err = csCloud.EnsureLoadBalancer("kubernetes", svc, baseNodes)
+				lbStatus, err = csCloud.EnsureLoadBalancer(context.Background(), "kubernetes", svc, baseNodes)
 				if cc.assert != nil {
 					cc.assert(t, srv, lbStatus, err)
 				}
