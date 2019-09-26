@@ -10,7 +10,7 @@ import (
 )
 
 // GetZone returns the Zone containing the current failure zone and locality region that the program is running in
-// In most cases, this method is called from the kubelet querying a local metadata service to aquire its zone.
+// In most cases, this method is called from the kubelet querying a local metadata service to acquire its zone.
 // For the case of external cloud providers, use GetZoneByProviderID or GetZoneByNodeName since GetZone
 // can no longer be called from the kubelets.
 func (cs *CSCloud) GetZone(ctx context.Context) (cloudprovider.Zone, error) {

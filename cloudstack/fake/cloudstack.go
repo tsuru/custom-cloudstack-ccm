@@ -52,10 +52,6 @@ func (s *CloudstackServer) newID(cmd string) int {
 	return s.idx[cmd]
 }
 
-func (s *CloudstackServer) lastID(cmd string) int {
-	return s.idx[cmd]
-}
-
 func (s *CloudstackServer) lbNameByID(lbID string) string {
 	for k, lb := range s.lbRules {
 		if lb["id"] == lbID {
@@ -391,7 +387,7 @@ func parseTags(form url.Values) map[string]string {
 	tagRegexp := regexp.MustCompile(`tags\[(\d+)\]\.(key|value)`)
 	keys := map[string]string{}
 	values := map[string]string{}
-	for k, _ := range form {
+	for k := range form {
 		matches := tagRegexp.FindStringSubmatch(k)
 		if len(matches) != 3 {
 			continue

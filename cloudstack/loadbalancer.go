@@ -299,7 +299,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networ
 		var ok bool
 		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.ProjectIDLabel)
 		if !ok {
-			klog.V(4).Infof("unable to retrive projectID for service: %#v", service)
+			klog.V(4).Infof("unable to retrieve projectID for service: %#v", service)
 		}
 	}
 	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
@@ -538,7 +538,7 @@ func (pc *projectCloud) releaseIPIfManaged(ip cloudstackIP, service *v1.Service)
 // 3 - Allocate a new random IP
 //
 // On situation 3 we'll also tag the IP address so that we can reuse or free it
-// in the future. If tagging fails we should imediately release it.
+// in the future. If tagging fails we should immediately release it.
 func (pc *projectCloud) getLoadBalancerIP(service *v1.Service, networkID string) (*cloudstackIP, error) {
 	klog.V(4).Infof("getLoadBalancerIP for service (%v, %v)", service.Namespace, service.Name)
 	ip, err := pc.tryPublicIPAddressByTags(service)
@@ -1127,7 +1127,7 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 	var result struct {
 		JobID string `json:"jobid"`
 	}
-	if err := client.Custom.CustomRequest(lb.cloud.config.Command.AssignNetworks, p, &result); err != nil {
+	if err = client.Custom.CustomRequest(lb.cloud.config.Command.AssignNetworks, p, &result); err != nil {
 		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Name, lb.cloud.config.Command.AssignNetworks, err)
 	}
 	if result.JobID != "" {
@@ -1178,7 +1178,7 @@ func (lb *loadBalancer) getClient() (*cloudstack.CloudStackClient, error) {
 func (pc *projectCloud) getClient() (*cloudstack.CloudStackClient, error) {
 	client := pc.environments[pc.environment].client
 	if client == nil {
-		return nil, fmt.Errorf("unable to retrive cloudstack client for env: %#v", pc)
+		return nil, fmt.Errorf("unable to retrieve cloudstack client for env: %#v", pc)
 	}
 	return client, nil
 }
