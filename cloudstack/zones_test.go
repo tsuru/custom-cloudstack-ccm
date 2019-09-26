@@ -1,6 +1,7 @@
 package cloudstack
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/kubernetes/pkg/cloudprovider"
+	cloudprovider "k8s.io/cloud-provider"
 )
 
 func TestCSCloudGetZone(t *testing.T) {
@@ -23,7 +24,7 @@ func TestCSCloudGetZone(t *testing.T) {
 	}
 	zones, implemented := cs.Zones()
 	require.True(t, implemented)
-	zone, err := zones.GetZone()
+	zone, err := zones.GetZone(context.Background())
 	require.Nil(t, err)
 	assert.Equal(t, cloudprovider.Zone{}, zone)
 }
@@ -61,7 +62,7 @@ func TestCSCloudGetZoneByNodeName(t *testing.T) {
 	}
 	zones, implemented := cs.Zones()
 	require.True(t, implemented)
-	zone, err := zones.GetZoneByNodeName("mynode")
+	zone, err := zones.GetZoneByNodeName(context.Background(), "mynode")
 	require.Nil(t, err)
 	assert.Equal(t, cloudprovider.Zone{
 		FailureDomain: "myzone",
@@ -103,7 +104,7 @@ func TestCSCloudGetZoneByProviderID(t *testing.T) {
 	}
 	zones, implemented := cs.Zones()
 	require.True(t, implemented)
-	zone, err := zones.GetZoneByProviderID("custom-cloudstack:///myproj/id123")
+	zone, err := zones.GetZoneByProviderID(context.Background(), "custom-cloudstack:///myproj/id123")
 	require.Nil(t, err)
 	assert.Equal(t, cloudprovider.Zone{
 		FailureDomain: "myzone",

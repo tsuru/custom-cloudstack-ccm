@@ -17,16 +17,17 @@ limitations under the License.
 package cloudstack
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/golang/glog"
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/kubernetes/pkg/cloudprovider"
+	cloudprovider "k8s.io/cloud-provider"
+	"k8s.io/klog"
 )
 
 type node struct {
@@ -41,8 +42,8 @@ func (n node) toProviderID() string {
 }
 
 // NodeAddresses returns the addresses of the specified instance.
-func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) {
-	glog.V(4).Infof("NodeAddresses(%v)", name)
+func (cs *CSCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.NodeAddress, error) {
+	klog.V(4).Infof("NodeAddresses(%v)", name)
 	node, err := cs.getNodeByName(string(name))
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
@@ -58,8 +59,8 @@ func (cs *CSCloud) NodeAddresses(name types.NodeName) ([]v1.NodeAddress, error) 
 }
 
 // NodeAddressesByProviderID returns the addresses of the specified instance.
-func (cs *CSCloud) NodeAddressesByProviderID(providerID string) ([]v1.NodeAddress, error) {
-	glog.V(4).Infof("NodeAddressesByProviderID(%v)", providerID)
+func (cs *CSCloud) NodeAddressesByProviderID(ctx context.Context, providerID string) ([]v1.NodeAddress, error) {
+	klog.V(4).Infof("NodeAddressesByProviderID(%v)", providerID)
 	if providerID == "" {
 		return nil, fmt.Errorf("empty providerID")
 	}
@@ -84,21 +85,21 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 	} else {
 		// Since there is no sane way to determine the external IP if the host isn't
 		// using static NAT, we will just fire a log message and omit the external IP.
-		glog.V(4).Infof("Could not determine the public IP of host %v (%v)", instance.Name, instance.Id)
+		klog.V(4).Infof("Could not determine the public IP of host %v (%v)", instance.Name, instance.Id)
 	}
 
 	return addresses, nil
 }
 
 // ExternalID returns the cloud provider ID of the specified instance (deprecated).
-func (cs *CSCloud) ExternalID(name types.NodeName) (string, error) {
-	glog.V(4).Infof("ExternalID(%v)", name)
-	return cs.InstanceID(name)
+func (cs *CSCloud) ExternalID(ctx context.Context, name types.NodeName) (string, error) {
+	klog.V(4).Infof("ExternalID(%v)", name)
+	return cs.InstanceID(ctx, name)
 }
 
 // InstanceID returns the cloud provider ID of the specified instance.
-func (cs *CSCloud) InstanceID(name types.NodeName) (string, error) {
-	glog.V(4).Infof("InstanceID(%v)", name)
+func (cs *CSCloud) InstanceID(ctx context.Context, name types.NodeName) (string, error) {
+	klog.V(4).Infof("InstanceID(%v)", name)
 	node, err := cs.getNodeByName(string(name))
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
@@ -128,8 +129,8 @@ func parseProviderID(instanceID string) (node, error) {
 }
 
 // InstanceType returns the type of the specified instance.
-func (cs *CSCloud) InstanceType(name types.NodeName) (string, error) {
-	glog.V(4).Infof("InstanceType(%v)", name)
+func (cs *CSCloud) InstanceType(ctx context.Context, name types.NodeName) (string, error) {
+	klog.V(4).Infof("InstanceType(%v)", name)
 	node, err := cs.getNodeByName(string(name))
 	if err != nil {
 		return "", fmt.Errorf("error retrieving node by name %q: %v", string(name), err)
@@ -167,8 +168,8 @@ func (cs *CSCloud) instanceByProviderID(providerID string) (*cloudstack.VirtualM
 }
 
 // InstanceTypeByProviderID returns the type of the specified instance.
-func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
-	glog.V(4).Infof("InstanceTypeByProviderID(%v)", providerID)
+func (cs *CSCloud) InstanceTypeByProviderID(ctx context.Context, providerID string) (string, error) {
+	klog.V(4).Infof("InstanceTypeByProviderID(%v)", providerID)
 	if providerID == "" {
 		return "", fmt.Errorf("empty providerID")
 	}
@@ -180,20 +181,20 @@ func (cs *CSCloud) InstanceTypeByProviderID(providerID string) (string, error) {
 }
 
 // AddSSHKeyToAllInstances is currently not implemented.
-func (cs *CSCloud) AddSSHKeyToAllInstances(user string, keyData []byte) error {
-	glog.V(4).Infof("AddSSHKeyToAllInstances(%v, %v)", user, keyData)
+func (cs *CSCloud) AddSSHKeyToAllInstances(ctx context.Context, user string, keyData []byte) error {
+	klog.V(4).Infof("AddSSHKeyToAllInstances(%v, %v)", user, keyData)
 	return errors.New("AddSSHKeyToAllInstances not implemented")
 }
 
 // CurrentNodeName returns the name of the node we are currently running on.
-func (cs *CSCloud) CurrentNodeName(hostname string) (types.NodeName, error) {
-	glog.V(4).Infof("CurrentNodeName(%v)", hostname)
+func (cs *CSCloud) CurrentNodeName(ctx context.Context, hostname string) (types.NodeName, error) {
+	klog.V(4).Infof("CurrentNodeName(%v)", hostname)
 	return types.NodeName(hostname), nil
 }
 
 // InstanceExistsByProviderID returns if the instance still exists.
-func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
-	glog.V(4).Infof("InstanceExistsByProviderID(%v)", providerID)
+func (cs *CSCloud) InstanceExistsByProviderID(ctx context.Context, providerID string) (bool, error) {
+	klog.V(4).Infof("InstanceExistsByProviderID(%v)", providerID)
 	if providerID == "" {
 		return false, fmt.Errorf("empty providerID")
 	}
@@ -207,6 +208,26 @@ func (cs *CSCloud) InstanceExistsByProviderID(providerID string) (bool, error) {
 	return true, nil
 }
 
+// InstanceShutdownByProviderID returns true if the instance is shutdown in cloudprovider
+func (cs *CSCloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error) {
+	klog.V(4).Infof("InstanceShutdownByProviderID(%v)", providerID)
+	if providerID == "" {
+		return false, fmt.Errorf("empty providerID")
+	}
+	instance, err := cs.instanceByProviderID(providerID)
+	if err != nil {
+		return false, err
+	}
+	// States from https://github.com/apache/cloudstack/blob/87c43501608a1df72a2f01ed17a522233e6617b0/api/src/main/java/com/cloud/vm/VirtualMachine.java#L45
+	switch instance.State {
+	case "Stopping", "Stopped", "Destroyed", "Expunging", "Shutdowned", "Error":
+		return true, nil
+	case "Unknown":
+		return false, errors.New("unknown vm state in cloudstack")
+	}
+	return false, nil
+}
+
 func (cs *CSCloud) getInstanceForNode(n *node) (*cloudstack.VirtualMachine, error) {
 	client, err := cs.clientForNode(n)
 	if err != nil {
@@ -217,18 +238,18 @@ func (cs *CSCloud) getInstanceForNode(n *node) (*cloudstack.VirtualMachine, erro
 		cloudstack.WithProject(n.projectID),
 	)
 	if err != nil {
-		glog.V(4).Infof("getInstanceForNode(%v): Could not find VM: %v", n, err)
+		klog.V(4).Infof("getInstanceForNode(%v): Could not find VM: %v", n, err)
 		if count == 0 {
 			return nil, cloudprovider.InstanceNotFound
 		}
 		return nil, fmt.Errorf("error instance for node %v: %v", n, err)
 	}
-	glog.V(4).Infof("getInstanceForNode(%v): Found instance %#v", n, instance)
+	klog.V(4).Infof("getInstanceForNode(%v): Found instance %#v", n, instance)
 	return instance, nil
 }
 
 func (cs *CSCloud) getNodeByName(name string) (*node, error) {
-	kubeNode, err := cs.kubeClient.CoreV1().Nodes().Get(name, metav1.GetOptions{IncludeUninitialized: true})
+	kubeNode, err := cs.kubeClient.CoreV1().Nodes().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +257,7 @@ func (cs *CSCloud) getNodeByName(name string) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	glog.V(4).Infof("getNodeByName(%v): found node: %#v", name, n)
+	klog.V(4).Infof("getNodeByName(%v): found node: %#v", name, n)
 	return n, nil
 }
 
