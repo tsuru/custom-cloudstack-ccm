@@ -67,6 +67,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		srv.HasCalls(t, []cloudstackFake.MockAPICall{
 			{Command: "listVirtualMachines"},
 			{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+			{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 			{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
 			{Command: "listNetworks"},
 			{Command: "associateIpAddress"},
@@ -200,6 +201,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
 							{Command: "listNetworks"},
 							{Command: "associateIpAddress", Params: url.Values{"foo": []string{"bar"}, "lbenvironmentid": []string{"3"}, "networkid": []string{"net1"}}},
@@ -248,6 +250,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
 							{Command: "listNetworks"},
 							{Command: "associateIpAddress", Params: url.Values{"lbenvironmentid": []string{"1"}, "networkid": []string{"net1"}}},
@@ -287,7 +290,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						svc.Spec.Ports[0].NodePort = 30002
 						svc.Labels["csccm.cloudprovider.io/loadbalancer-name"] = "foo.bar.com"
 						return *svc
 					})(),
@@ -301,8 +303,10 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"foo.bar.com"}}},
-							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
-							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"foo.bar.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30002"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "deleteLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"foo.bar.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
 							{Command: "queryAsyncJobResult"},
@@ -331,7 +335,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						svc.Spec.Ports[0].NodePort = 30002
 						svc.Labels["csccm.cloudprovider.io/loadbalancer-name-suffix"] = "anotherrealm.com"
 						return *svc
 					})(),
@@ -345,8 +348,10 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.anotherrealm.com"}}},
-							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
-							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.anotherrealm.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30002"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "deleteLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.anotherrealm.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
 							{Command: "queryAsyncJobResult"},
@@ -449,6 +454,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses"},
 							{Command: "listNetworks"},
 							{Command: "associateIpAddress"},
@@ -470,6 +476,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"0"}}},
 							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
 							{Command: "queryAsyncJobResult"},
@@ -514,6 +521,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses"},
 							{Command: "listNetworks"},
 							{Command: "associateIpAddress"},
@@ -620,6 +628,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses"},
 							{Command: "listNetworks"},
 							{Command: "associateIpAddress"},
@@ -642,6 +651,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
 							{Command: "listNetworks"},
 							{Command: "associateIpAddress"},
@@ -686,6 +696,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"0"}, "tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"ipaddress": []string{"192.168.9.9"}}},
 						})
@@ -719,6 +730,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"page": []string{"0"}, "tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
 							{Command: "listPublicIpAddresses", Params: url.Values{"ipaddress": []string{"192.168.9.9"}}},
 							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"mycustomip"}, "privateport": []string{"30001"}}},
@@ -982,6 +994,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			},
 			rule: &loadBalancerRule{
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
@@ -1000,6 +1013,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
 					Publicport:  "1234",
 					Privateport: "4567",
 					Publicip:    "10.0.0.1",
@@ -1025,6 +1039,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 					"10:5",
 				},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
 					Publicport:  "2",
 					Privateport: "20",
 					Tags: []cloudstack.Tags{
@@ -1045,6 +1060,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
 					Id:          "id-1",
 					Publicport:  "2",
 					Privateport: "20",
@@ -1064,6 +1080,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
 					Publicport:  "1",
 					Privateport: "2",
 					Algorithm:   "x",
@@ -1083,6 +1100,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
 					Publicport:  "1",
 					Privateport: "2",
 					Tags: []cloudstack.Tags{
@@ -1093,6 +1111,25 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			existing:     true,
 			needsUpdate:  true,
 			deleteCalled: false,
+		},
+		{
+			svcPorts: []corev1.ServicePort{
+				{Port: 1, NodePort: 2},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "other",
+					Publicport:  "1",
+					Privateport: "2",
+					Tags: []cloudstack.Tags{
+						{Key: serviceTag}, {Key: cloudProviderTag},
+					},
+				},
+			},
+			existing:     false,
+			needsUpdate:  false,
+			deleteCalled: true,
 		},
 	}
 

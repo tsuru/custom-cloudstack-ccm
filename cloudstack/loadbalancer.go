@@ -321,7 +321,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networ
 		return lb, nil
 	}
 
-	lb.rule, err = getLoadBalancerRule(client, lb.name, projectID)
+	lb.rule, err = getLoadBalancerRule(client, service, lb.name, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("load balancer %s for service %v/%v get rule error: %v", lb.name, service.Namespace, service.Name, err)
 	}
@@ -337,7 +337,18 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networ
 	return lb, nil
 }
 
-func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID string) (*loadBalancerRule, error) {
+func getLoadBalancerRule(client *cloudstack.CloudStackClient, service *v1.Service, lbName, projectID string) (*loadBalancerRule, error) {
+	lb, err := getLoadBalancerRuleByName(client, lbName, projectID)
+	if lb == nil && err == nil {
+		lb, err = getLoadBalancerByTags(client, service, projectID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return lb, nil
+}
+
+func getLoadBalancerRuleByName(client *cloudstack.CloudStackClient, lbName, projectID string) (*loadBalancerRule, error) {
 	pc := &cloudstack.CustomServiceParams{}
 
 	pc.SetParam("keyword", lbName)
@@ -370,6 +381,49 @@ func getLoadBalancerRule(client *cloudstack.CloudStackClient, lbName, projectID 
 	}
 	if count > 1 {
 		return nil, fmt.Errorf("lb %q too many rules associated: %#v", lbName, result.LoadBalancerRules)
+	}
+	if count == 0 {
+		return nil, nil
+	}
+	return lbResult, nil
+}
+
+func getLoadBalancerByTags(client *cloudstack.CloudStackClient, service *v1.Service, projectID string) (*loadBalancerRule, error) {
+	pc := &cloudstack.CustomServiceParams{}
+
+	pc.SetParam("listall", true)
+	if projectID != "" {
+		pc.SetParam("projectid", projectID)
+	}
+	tags := tagsForService(service)
+	// Use only service name in query, as we'll filter the result by all tags a
+	// few lines down.
+	pc.SetParam("tags[0].key", serviceTag)
+	pc.SetParam("tags[0].value", tags[serviceTag])
+
+	var result struct {
+		Count             int                 `json:"count"`
+		LoadBalancerRules []*loadBalancerRule `json:"loadbalancerrule"`
+	}
+
+	err := client.Custom.CustomRequest("listLoadBalancerRules", pc, &result)
+	if err != nil {
+		return nil, err
+	}
+	if result.Count == 0 {
+		return nil, nil
+	}
+
+	var count int
+	var lbResult *loadBalancerRule
+	for _, lbRule := range result.LoadBalancerRules {
+		if matchAllTags(lbRule.Tags, tags) {
+			lbResult = lbRule
+			count++
+		}
+	}
+	if count > 1 {
+		return nil, fmt.Errorf("tags %#v with too many rules associated: %#v", tags, result.LoadBalancerRules)
 	}
 	if count == 0 {
 		return nil, nil
@@ -566,9 +620,9 @@ func (pc *projectCloud) getLoadBalancerIP(service *v1.Service, networkID string)
 	return ip, nil
 }
 
-func matchAllTags(publicIP *cloudstack.PublicIpAddress, tags map[string]string) bool {
+func matchAllTags(csTags []cloudstack.Tags, tags map[string]string) bool {
 	validCount := 0
-	for _, tag := range publicIP.Tags {
+	for _, tag := range csTags {
 		if tags[tag.Key] == tag.Value {
 			validCount++
 			if validCount == len(tags) {
@@ -605,7 +659,7 @@ func (pc *projectCloud) tryPublicIPAddressByTags(service *v1.Service) (*cloudsta
 	for _, publicIP := range publicIPAddresses {
 		// This match call is necessary because aparently cloudstack does an OR
 		// when multiple tags are specified and we want an AND.
-		if matchAllTags(publicIP, tags) {
+		if matchAllTags(publicIP.Tags, tags) {
 			validIPs = append(validIPs, cloudstackIP{
 				id:      publicIP.Id,
 				address: publicIP.Ipaddress,
@@ -815,8 +869,9 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 		return false, false, errors.New("invalid ports")
 	}
 
-	// Check if any of the values we cannot update (those that require a new load balancer rule) are changed.
-	if comparePorts(ports, lb.rule) {
+	// Check if any of the values we cannot update (those that require a new
+	// load balancer rule) are changed.
+	if comparePorts(ports, lb.rule) && lb.name == lb.rule.Name {
 		missingTags, err := lb.hasMissingTags()
 		if err != nil {
 			return false, false, err
@@ -828,7 +883,7 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 		return true, needsUpdate, nil
 	}
 
-	klog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
+	klog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.rule.Name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
 
 	// Delete the load balancer rule so we can create a new one using the new values.
 	if err := lb.deleteLoadBalancerRule(); err != nil {

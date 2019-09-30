@@ -84,13 +84,24 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "listLoadBalancerRules":
 		keyword := r.FormValue("keyword")
+		queryTags := parseTags(r.Form)
+
 		var lbs []loadBalancerRule
 		for _, lb := range s.lbRules {
-			if strings.Contains(lb["name"].(string), keyword) || strings.Contains(lb["id"].(string), keyword) {
-				lb["tags"] = s.tags[lb["id"].(string)]
+			lbTags := s.tags[lb["id"].(string)]
+			matchTags := false
+			for _, tag := range lbTags {
+				if queryTags[tag.Key] == tag.Value {
+					matchTags = true
+				}
+			}
+			if matchTags ||
+				(keyword != "" && (strings.Contains(lb["name"].(string), keyword) || strings.Contains(lb["id"].(string), keyword))) {
+				lb["tags"] = lbTags
 				lbs = append(lbs, lb)
 			}
 		}
+
 		w.Write(MarshalResponse("listLoadBalancerRulesResponse", map[string]interface{}{
 			"count":            len(lbs),
 			"loadbalancerrule": lbs,
