@@ -520,12 +520,12 @@ func (cs *CSCloud) GetLoadBalancerName(ctx context.Context, clusterName string, 
 }
 
 func (cs *CSCloud) getLoadBalancerName(service *v1.Service) string {
-	name, ok := getLabelOrAnnotation(service.ObjectMeta, lbNameLabel)
-	if ok {
+	name, _ := getLabelOrAnnotation(service.ObjectMeta, lbNameLabel)
+	if name != "" {
 		return name
 	}
-	suffix, ok := getLabelOrAnnotation(service.ObjectMeta, lbNameSuffix)
-	if ok {
+	suffix, _ := getLabelOrAnnotation(service.ObjectMeta, lbNameSuffix)
+	if suffix != "" {
 		return fmt.Sprintf("%s.%s", service.Name, suffix)
 	}
 	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
