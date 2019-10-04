@@ -371,6 +371,56 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		},
 
 		{
+			name: "set use-targetport annotation creates LB using targetport same as destination",
+			calls: []consecutiveCall{
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-use-targetport"] = "true"
+						svc.Spec.Ports = []corev1.ServicePort{{Port: 80, NodePort: 30002, Protocol: corev1.ProtocolTCP}, {Port: 443, NodePort: 30003, Protocol: corev1.ProtocolTCP}}
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
+							{Command: "listNetworks"},
+							{Command: "associateIpAddress", Params: url.Values{"lbenvironmentid": []string{"1"}, "networkid": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"80"}, "additionalportmap": []string{"443:443"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+			},
+		},
+
+		{
 			name: "updating ports while returned multiple lb rules with same suffix lbname",
 			hook: func(t *testing.T, srv *cloudstackFake.CloudstackServer) {
 				srv.AddLBRule("foo.svc1.test.com", map[string]interface{}{
@@ -983,6 +1033,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		needsUpdate  bool
 		deleteCalled bool
 		errorMatches string
+		annotations  map[string]string
 	}{
 		{
 			existing:    false,
@@ -1131,6 +1182,31 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			needsUpdate:  false,
 			deleteCalled: true,
 		},
+		{
+			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
+			svcPorts: []corev1.ServicePort{
+				{Port: 1, NodePort: 2},
+				{Port: 2, NodePort: 20},
+				{Port: 3, NodePort: 30},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{
+					"2:2",
+					"3:3",
+				},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
+					Publicport:  "1",
+					Privateport: "1",
+					Tags: []cloudstack.Tags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
+				},
+			},
+			existing:     true,
+			needsUpdate:  false,
+			deleteCalled: false,
+		},
 	}
 
 	var deleteCalled bool
@@ -1159,7 +1235,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: tt.rule,
 		}
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			existing, needsUpdate, err := lb.checkLoadBalancerRule("name", tt.svcPorts)
+			existing, needsUpdate, err := lb.checkLoadBalancerRule("name", &corev1.Service{ObjectMeta: metav1.ObjectMeta{Annotations: tt.annotations}, Spec: corev1.ServiceSpec{Ports: tt.svcPorts}})
 			if tt.errorMatches != "" {
 				assert.Error(t, err)
 				assert.Regexp(t, tt.errorMatches, err.Error())

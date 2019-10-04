@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	lbNameLabel  = "csccm.cloudprovider.io/loadbalancer-name"
-	lbNameSuffix = "csccm.cloudprovider.io/loadbalancer-name-suffix"
+	lbNameLabel     = "csccm.cloudprovider.io/loadbalancer-name"
+	lbNameSuffix    = "csccm.cloudprovider.io/loadbalancer-name-suffix"
+	lbUseTargetPort = "csccm.cloudprovider.io/loadbalancer-use-targetport"
 
 	associateIPAddressExtraParamPrefix = "csccm.cloudprovider.io/associateipaddress-extra-param-"
 	createLoadBalancerExtraParamPrefix = "csccm.cloudprovider.io/createloadbalancer-extra-param-"
@@ -173,7 +174,7 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 	}
 
 	// If the load balancer rule exists and is up-to-date, we move on to the next rule.
-	exists, needsUpdate, err := lb.checkLoadBalancerRule(lb.name, service.Spec.Ports)
+	exists, needsUpdate, err := lb.checkLoadBalancerRule(lb.name, service)
 	if err != nil {
 		return nil, err
 	}
@@ -843,16 +844,27 @@ func sortPorts(ports []v1.ServicePort) {
 	})
 }
 
-func comparePorts(ports []v1.ServicePort, rule *loadBalancerRule) bool {
+func comparePorts(service *v1.Service, rule *loadBalancerRule) bool {
+	ports := service.Spec.Ports
+	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	sortPorts(ports)
 	var additionalPorts []string
 	for _, p := range ports[1:] {
-		additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+		if useTargetPort {
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.Port))
+		} else {
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+		}
 	}
 	sort.Strings(additionalPorts)
 	sort.Strings(rule.AdditionalPortMap)
 	if len(rule.AdditionalPortMap) == 0 {
 		rule.AdditionalPortMap = nil
+	}
+	if useTargetPort {
+		return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
+			rule.Privateport == strconv.Itoa(int(ports[0].Port)) &&
+			rule.Publicport == strconv.Itoa(int(ports[0].Port))
 	}
 	return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
 		rule.Privateport == strconv.Itoa(int(ports[0].NodePort)) &&
@@ -861,7 +873,8 @@ func comparePorts(ports []v1.ServicePort, rule *loadBalancerRule) bool {
 
 // checkLoadBalancerRule checks if the rule already exists and if it does, if it can be updated. If
 // it does exist but cannot be updated, it will delete the existing rule so it can be created again.
-func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.ServicePort) (bool, bool, error) {
+func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, service *v1.Service) (bool, bool, error) {
+	ports := service.Spec.Ports
 	if lb.rule == nil {
 		return false, false, nil
 	}
@@ -871,7 +884,7 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, ports []v1.Serv
 
 	// Check if any of the values we cannot update (those that require a new
 	// load balancer rule) are changed.
-	if comparePorts(ports, lb.rule) && lb.name == lb.rule.Name {
+	if comparePorts(service, lb.rule) && lb.name == lb.rule.Name {
 		missingTags, err := lb.hasMissingTags()
 		if err != nil {
 			return false, false, err
@@ -928,6 +941,10 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	p.SetParam("algorithm", lb.algorithm)
 	p.SetParam("name", lbRuleName)
 	p.SetParam("privateport", int(ports[0].NodePort))
+	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
+	if useTargetPort {
+		p.SetParam("privateport", int(ports[0].Port))
+	}
 	p.SetParam("publicport", int(ports[0].Port))
 	p.SetParam("networkid", lb.mainNetworkID)
 	p.SetParam("publicipid", lb.ip.id)
@@ -943,7 +960,11 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 
 	var additionalPorts []string
 	for _, p := range ports[1:] {
-		additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+		if useTargetPort {
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.Port))
+		} else {
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
+		}
 	}
 	if len(additionalPorts) > 0 {
 		p.SetParam("additionalportmap", strings.Join(additionalPorts, ","))
