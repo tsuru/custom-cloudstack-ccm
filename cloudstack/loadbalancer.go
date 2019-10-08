@@ -851,7 +851,7 @@ func comparePorts(service *v1.Service, rule *loadBalancerRule) bool {
 	var additionalPorts []string
 	for _, p := range ports[1:] {
 		if useTargetPort {
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.Port))
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.TargetPort.IntVal))
 		} else {
 			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
 		}
@@ -863,7 +863,7 @@ func comparePorts(service *v1.Service, rule *loadBalancerRule) bool {
 	}
 	if useTargetPort {
 		return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
-			rule.Privateport == strconv.Itoa(int(ports[0].Port)) &&
+			rule.Privateport == strconv.Itoa(int(ports[0].TargetPort.IntVal)) &&
 			rule.Publicport == strconv.Itoa(int(ports[0].Port))
 	}
 	return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
@@ -943,7 +943,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	p.SetParam("privateport", int(ports[0].NodePort))
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	if useTargetPort {
-		p.SetParam("privateport", int(ports[0].Port))
+		p.SetParam("privateport", int(ports[0].TargetPort.IntVal))
 	}
 	p.SetParam("publicport", int(ports[0].Port))
 	p.SetParam("networkid", lb.mainNetworkID)
@@ -961,7 +961,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	var additionalPorts []string
 	for _, p := range ports[1:] {
 		if useTargetPort {
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.Port))
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.TargetPort.IntVal))
 		} else {
 			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
 		}

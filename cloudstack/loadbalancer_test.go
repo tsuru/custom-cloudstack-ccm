@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func init() {
@@ -377,7 +378,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-use-targetport"] = "true"
-						svc.Spec.Ports = []corev1.ServicePort{{Port: 80, NodePort: 30002, Protocol: corev1.ProtocolTCP}, {Port: 443, NodePort: 30003, Protocol: corev1.ProtocolTCP}}
+						svc.Spec.Ports = []corev1.ServicePort{{Port: 80, NodePort: 30002, TargetPort: intstr.IntOrString{IntVal: 80}, Protocol: corev1.ProtocolTCP}, {Port: 443, NodePort: 30003, TargetPort: intstr.IntOrString{IntVal: 443}, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
@@ -1185,19 +1186,19 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		{
 			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
 			svcPorts: []corev1.ServicePort{
-				{Port: 1, NodePort: 2},
-				{Port: 2, NodePort: 20},
-				{Port: 3, NodePort: 30},
+				{Port: 1, NodePort: 2, TargetPort: intstr.IntOrString{IntVal: 10}},
+				{Port: 2, NodePort: 20, TargetPort: intstr.IntOrString{IntVal: 40}},
+				{Port: 3, NodePort: 30, TargetPort: intstr.IntOrString{IntVal: 50}},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{
-					"2:2",
-					"3:3",
+					"2:40",
+					"3:50",
 				},
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
 					Name:        "test",
 					Publicport:  "1",
-					Privateport: "1",
+					Privateport: "10",
 					Tags: []cloudstack.Tags{
 						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
 					},
