@@ -54,6 +54,8 @@ type globalConfig struct {
 	NodeNameLabel      string `gcfg:"node-name-label"`
 	ProjectIDLabel     string `gcfg:"project-id-label"`
 	EnvironmentLabel   string `gcfg:"environment-label"`
+	InternalIPIndex    int    `gcfg:"internal-ip-index"`
+	ExternalIPIndex    int    `gcfg:"external-ip-index"`
 }
 
 type environmentConfig struct {
