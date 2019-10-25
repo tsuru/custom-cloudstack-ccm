@@ -77,7 +77,23 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 	}
 
 	addresses := []v1.NodeAddress{
-		{Type: v1.NodeInternalIP, Address: instance.Nic[0].Ipaddress},
+		{Type: v1.NodeHostName, Address: instance.Name},
+	}
+
+	var internalAddr string
+	internalIndex := cs.config.Global.InternalIPIndex
+	if internalIndex < 0 || internalIndex >= len(instance.Nic) {
+		klog.V(4).Infof("Unable to use index %v for internal IP, only %v NICs available, falling back to index 0", internalIndex, len(instance.Nic))
+		internalIndex = 0
+	}
+	internalAddr = instance.Nic[internalIndex].Ipaddress
+	addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: internalAddr})
+
+	externalIIndex := cs.config.Global.ExternalIPIndex
+	if externalIIndex != internalIndex && externalIIndex >= 0 && externalIIndex < len(instance.Nic) {
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeExternalIP, Address: instance.Nic[externalIIndex].Ipaddress})
+	} else {
+		klog.V(4).Infof("Unable to use index %v for external IP, only %v NICs available and %v is internal IP, ignoring", externalIIndex, len(instance.Nic), internalIndex)
 	}
 
 	if instance.Publicip != "" {
