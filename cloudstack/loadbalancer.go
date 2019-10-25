@@ -1049,6 +1049,9 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	idx := 0
 	for _, portPair := range strings.Split(lbPorts, ",") {
 		pool, err := generateGloboNetworkPool(idx, portPair, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
+		if pool == (globoNetworkPool{}) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRuleName, err)
 		}
@@ -1084,9 +1087,7 @@ func generateGloboNetworkPool(poolIdx int, ports string, service *v1.Service, gl
 		return globoNetworkPool{}, fmt.Errorf("error converting %v to int", portList[1])
 	}
 
-	var h string
 	for _, pool := range globoPools {
-		h = fmt.Sprintf("%v:%v - %v:%v", pool.VipPort, pool.Port, vipPort, dstPort)
 		if pool.VipPort == vipPort && pool.Port == dstPort {
 			pool.HealthCheck = strings.Split(healthCheckMessagesList, ",")[poolIdx]
 			pool.HealthCheckExpected = strings.Split(healthCheckResponsesList, ",")[poolIdx]
@@ -1094,7 +1095,7 @@ func generateGloboNetworkPool(poolIdx int, ports string, service *v1.Service, gl
 			return *pool, nil
 		}
 	}
-	return globoNetworkPool{HealthCheck: h}, nil
+	return globoNetworkPool{}, nil
 }
 
 // deleteLoadBalancerRule deletes a load balancer rule.
