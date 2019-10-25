@@ -20,7 +20,24 @@ type MockAPICall struct {
 	Params  url.Values
 }
 
-type loadBalancerRule map[string]interface{}
+type LoadBalancerRule struct {
+	Rule  map[string]interface{}
+	Pools []globoNetworkPool
+}
+
+type globoNetworkPoolsResponse struct {
+	Count             int                 `json:"count"`
+	GloboNetworkPools []*globoNetworkPool `json:"globonetworkpool"`
+}
+
+type globoNetworkPool struct {
+	Port                int    `json:"port"`
+	VipPort             int    `json:"vipport"`
+	HealthCheckType     string `json:"healthchecktype"`
+	HealthCheck         string `json:"healthcheck"`
+	HealthCheckExpected string `json:"healthcheckexpected"`
+	Id                  int    `json:"id"`
+}
 
 type CloudstackServer struct {
 	*httptest.Server
@@ -29,7 +46,7 @@ type CloudstackServer struct {
 	idx     map[string]int
 	Jobs    map[string]func() interface{}
 	tags    map[string][]cloudstack.Tags
-	lbRules map[string]loadBalancerRule
+	lbRules map[string]LoadBalancerRule
 	ips     map[string]*cloudstack.PublicIpAddress
 	vms     map[string][]*cloudstack.VirtualMachine
 }
@@ -37,7 +54,7 @@ type CloudstackServer struct {
 func NewCloudstackServer() *CloudstackServer {
 	cloudstackSrv := &CloudstackServer{
 		idx:     make(map[string]int),
-		lbRules: make(map[string]loadBalancerRule),
+		lbRules: make(map[string]LoadBalancerRule),
 		Jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tags),
 		ips:     make(map[string]*cloudstack.PublicIpAddress),
@@ -54,7 +71,7 @@ func (s *CloudstackServer) newID(cmd string) int {
 
 func (s *CloudstackServer) lbNameByID(lbID string) string {
 	for k, lb := range s.lbRules {
-		if lb["id"] == lbID {
+		if lb.Rule["id"] == lbID {
 			return k
 		}
 	}
@@ -65,7 +82,7 @@ func (s *CloudstackServer) AddIP(ip cloudstack.PublicIpAddress) {
 	s.ips[ip.Id] = &ip
 }
 
-func (s *CloudstackServer) AddLBRule(lbName string, lbRule loadBalancerRule) {
+func (s *CloudstackServer) AddLBRule(lbName string, lbRule LoadBalancerRule) {
 	s.lbRules[lbName] = lbRule
 }
 
@@ -86,9 +103,9 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		keyword := r.FormValue("keyword")
 		queryTags := parseTags(r.Form)
 
-		var lbs []loadBalancerRule
+		var lbs []map[string]interface{}
 		for _, lb := range s.lbRules {
-			lbTags := s.tags[lb["id"].(string)]
+			lbTags := s.tags[lb.Rule["id"].(string)]
 			matchTags := false
 			for _, tag := range lbTags {
 				if queryTags[tag.Key] == tag.Value {
@@ -96,15 +113,30 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if matchTags ||
-				(keyword != "" && (strings.Contains(lb["name"].(string), keyword) || strings.Contains(lb["id"].(string), keyword))) {
-				lb["tags"] = lbTags
-				lbs = append(lbs, lb)
+				(keyword != "" && (strings.Contains(lb.Rule["name"].(string), keyword) || strings.Contains(lb.Rule["id"].(string), keyword))) {
+				lb.Rule["tags"] = lbTags
+				lbs = append(lbs, lb.Rule)
 			}
 		}
 
 		w.Write(MarshalResponse("listLoadBalancerRulesResponse", map[string]interface{}{
 			"count":            len(lbs),
 			"loadbalancerrule": lbs,
+		}))
+
+	case "listGloboNetworkPools":
+		lbruleid := r.FormValue("lbruleid")
+		for _, lb := range s.lbRules {
+			if lb.Rule["id"] == lbruleid {
+				w.Write(MarshalResponse("listGloboNetworkPoolResponse", map[string]interface{}{
+					"count":            len(lb.Pools),
+					"globonetworkpool": lb.Pools,
+				}))
+				return
+			}
+		}
+		w.Write(MarshalResponse("listGloboNetworkPoolResponse", globoNetworkPoolsResponse{
+			Count: 0,
 		}))
 
 	case "listNetworks":
@@ -196,7 +228,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(MarshalResponse("updateLoadBalancerRuleResponse", obj))
 		s.Jobs[obj.JobID] = func() interface{} {
-			s.lbRules[lbName]["algorithm"] = algorithm
+			s.lbRules[lbName].Rule["algorithm"] = algorithm
 			return s.lbRules[lbName]
 		}
 
@@ -209,9 +241,10 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		ruleIdx := s.newID(cmd)
 		jobID := fmt.Sprintf("job-lbrule-%d", ruleIdx)
-		obj := loadBalancerRule{
-			"id":    fmt.Sprintf("lbrule-%d", ruleIdx),
-			"jobid": jobID,
+		obj := LoadBalancerRule{
+			Rule: map[string]interface{}{
+				"id":    fmt.Sprintf("lbrule-%d", ruleIdx),
+				"jobid": jobID},
 		}
 		ipObj := s.ips[r.FormValue("publicipid")]
 		if ipObj.Id == "" {
@@ -219,22 +252,42 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Write(ErrorResponse(cmd+"Response", fmt.Sprintf("ip id not found: %s", r.FormValue("publicipid"))))
 			return
 		}
-		w.Write(MarshalResponse("createLoadBalancerRuleResponse", obj))
-		obj["algorithm"] = r.FormValue("algorithm")
-		obj["name"] = r.FormValue("name")
-		obj["privateport"] = r.FormValue("privateport")
-		obj["publicport"] = r.FormValue("publicport")
-		obj["networkid"] = r.FormValue("networkid")
-		obj["publicipid"] = r.FormValue("publicipid")
-		obj["protocol"] = r.FormValue("protocol")
-		obj["openfirewall"], _ = strconv.ParseBool(r.FormValue("openfirewall"))
-		obj["publicip"] = ipObj.Ipaddress
+		w.Write(MarshalResponse("createLoadBalancerRuleResponse", obj.Rule))
+		obj.Rule["algorithm"] = r.FormValue("algorithm")
+		obj.Rule["name"] = r.FormValue("name")
+		obj.Rule["privateport"] = r.FormValue("privateport")
+		obj.Rule["publicport"] = r.FormValue("publicport")
+		obj.Rule["networkid"] = r.FormValue("networkid")
+		obj.Rule["publicipid"] = r.FormValue("publicipid")
+		obj.Rule["protocol"] = r.FormValue("protocol")
+		obj.Rule["openfirewall"], _ = strconv.ParseBool(r.FormValue("openfirewall"))
+		obj.Rule["publicip"] = ipObj.Ipaddress
+		publicPort, _ := strconv.Atoi(obj.Rule["publicport"].(string))
+		privatePort, _ := strconv.Atoi(obj.Rule["privateport"].(string))
+		obj.Pools = append(obj.Pools, globoNetworkPool{
+			Id:              0,
+			VipPort:         publicPort,
+			Port:            privatePort,
+			HealthCheckType: obj.Rule["protocol"].(string),
+		})
 		if additionalPorts := r.FormValue("additionalportmap"); additionalPorts != "" {
-			obj["additionalportmap"] = strings.Split(r.FormValue("additionalportmap"), ",")
+			obj.Rule["additionalportmap"] = strings.Split(r.FormValue("additionalportmap"), ",")
+			addPortIdx := 1
+			for _, portPair := range obj.Rule["additionalportmap"].([]string) {
+				additionalPublicPort, _ := strconv.Atoi(strings.Split(portPair, ":")[0])
+				additionalPrivatePort, _ := strconv.Atoi(strings.Split(portPair, ":")[1])
+				obj.Pools = append(obj.Pools, globoNetworkPool{
+					Id:              addPortIdx,
+					VipPort:         additionalPublicPort,
+					Port:            additionalPrivatePort,
+					HealthCheckType: obj.Rule["protocol"].(string),
+				})
+				addPortIdx++
+			}
 		}
 		s.Jobs[jobID] = func() interface{} {
 			s.lbRules[lbname] = obj
-			return obj
+			return obj.Rule
 		}
 
 	case "assignNetworkToLBRule":

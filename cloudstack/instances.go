@@ -302,3 +302,12 @@ func getLabelOrAnnotation(obj metav1.ObjectMeta, name string) (string, bool) {
 	n, ok := obj.Annotations[name]
 	return n, ok
 }
+
+func checkRequiredLabelsOrAnnotations(service *v1.Service, labels []string) bool {
+	for _, label := range labels {
+		if _, ok := getLabelOrAnnotation(service.ObjectMeta, label); !ok {
+			return false
+		}
+	}
+	return true
+}
