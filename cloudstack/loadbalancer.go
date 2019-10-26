@@ -93,6 +93,11 @@ type globoNetworkPool struct {
 	Id                  int    `json:"id"`
 }
 
+type UpdateGloboNetworkPoolResponse struct {
+	JobID     string `json:"jobid"`
+	Jobstatus int    `json:"jobstatus"`
+}
+
 func (ip cloudstackIP) String() string {
 	return fmt.Sprintf("ip(%v, %v)", ip.id, ip.address)
 }
@@ -208,6 +213,9 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 
 	if exists {
 		if err = lb.syncNodes(hostIDs, networkIDs); err != nil {
+			return nil, err
+		}
+		if err = lb.updateLoadBalancerPool(lb.rule, service); err != nil {
 			return nil, err
 		}
 		return status, nil
@@ -997,6 +1005,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 
 	// Create a new load balancer rule.
 	r := cloudstack.CreateLoadBalancerRuleResponse{}
+
 	err = client.Custom.CustomRequest("createLoadBalancerRule", p, &r)
 	if err != nil {
 		return nil, fmt.Errorf("error creating load balancer rule %v: %v", lbRuleName, err)
@@ -1022,55 +1031,74 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 		},
 	}
 
+	err = lb.updateLoadBalancerPool(lbRule, service)
+	if err != nil {
+		return nil, fmt.Errorf("updateLoadBalacerPool error: %v", err)
+	}
+
+	return lbRule, nil
+}
+
+func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service *v1.Service) error {
+
+	client, err := lb.getClient()
+	if err != nil {
+		return err
+	}
+
 	healthCheckRequiredLabels := []string{lbCustomHealthCheckProtocols, lbCustomHealthCheckPorts, lbCustomHealthCheckMessages, lbCustomHealthCheckResponses}
 	_, lbCustomHealthCheckVal := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheck)
 	if !lbCustomHealthCheckVal && !checkRequiredLabelsOrAnnotations(service, healthCheckRequiredLabels) {
 		klog.V(4).Infof("Custom healthcheck for %s set but missing required labels/annotations", lbRule.Name)
-		return lbRule, nil
+		return nil
 	}
 
 	listGloboNetworkPoolsParams := &cloudstack.CustomServiceParams{}
 	listGloboNetworkPoolsResponse := globoNetworkPools{}
 
-	listGloboNetworkPoolsParams.SetParam("lbruleid", r.Id)
+	listGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
 	err = client.Custom.CustomRequest("listGloboNetworkPools", listGloboNetworkPoolsParams, &listGloboNetworkPoolsResponse)
 
 	if err != nil {
-		return nil, fmt.Errorf("error list load balancer pools for %v: %v", lbRuleName, err)
+		return fmt.Errorf("error list load balancer pools for %v: %v", lbRule.Name, err)
 	}
 
 	if listGloboNetworkPoolsResponse.Count < 1 {
-		return lbRule, nil
+		return nil
 	}
 
 	lbPorts, _ := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheckPorts)
 	updateGloboNetworkPoolsParams := &cloudstack.CustomServiceParams{}
 
 	idx := 0
+	r := UpdateGloboNetworkPoolResponse{}
 	for _, portPair := range strings.Split(lbPorts, ",") {
 		pool, err := generateGloboNetworkPool(idx, portPair, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
 		if pool == (globoNetworkPool{}) {
+			idx++
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRuleName, err)
+			return fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRule.Name, err)
 		}
 		updateGloboNetworkPoolsParams.SetParam("poolids", pool.Id)
-		updateGloboNetworkPoolsParams.SetParam("lbruleid", r.Id)
+		updateGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
 		updateGloboNetworkPoolsParams.SetParam("healthchecktype", strings.ToUpper(pool.HealthCheckType))
 		updateGloboNetworkPoolsParams.SetParam("healthcheck", pool.HealthCheck)
 		updateGloboNetworkPoolsParams.SetParam("expectedhealthcheck", pool.HealthCheckExpected)
-		client.Custom.CustomRequest("updateGloboNetworkPool", updateGloboNetworkPoolsParams, &r)
+		err = client.Custom.CustomRequest("updateGloboNetworkPool", updateGloboNetworkPoolsParams, &r)
+		if err != nil {
+			return fmt.Errorf("error updating globo network pool for %v: %v", lbRule.Name, err)
+		}
 		if r.JobID != "" {
 			err = waitJob(client, r.JobID, &r)
 			if err != nil {
-				return nil, fmt.Errorf("error waiting for globo network pool for rule %v: %v", lbRuleName, err)
+				return fmt.Errorf("error waiting for globo network pool for rule %v: %v", lbRule.Name, err)
 			}
 		}
 		idx++
 	}
-
-	return lbRule, nil
+	return nil
 }
 
 func generateGloboNetworkPool(poolIdx int, ports string, service *v1.Service, globoPools []*globoNetworkPool) (globoNetworkPool, error) {
@@ -1088,7 +1116,10 @@ func generateGloboNetworkPool(poolIdx int, ports string, service *v1.Service, gl
 	}
 
 	for _, pool := range globoPools {
-		if pool.VipPort == vipPort && pool.Port == dstPort {
+		if (pool.VipPort == vipPort && pool.Port == dstPort) &&
+			(pool.HealthCheck != strings.Split(healthCheckMessagesList, ",")[poolIdx] ||
+				pool.HealthCheckExpected != strings.Split(healthCheckResponsesList, ",")[poolIdx] ||
+				pool.HealthCheckType != strings.Split(healthCheckProtocolsList, ",")[poolIdx]) {
 			pool.HealthCheck = strings.Split(healthCheckMessagesList, ",")[poolIdx]
 			pool.HealthCheckExpected = strings.Split(healthCheckResponsesList, ",")[poolIdx]
 			pool.HealthCheckType = strings.Split(healthCheckProtocolsList, ",")[poolIdx]

@@ -286,7 +286,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						svc.Annotations["csccm.cloudprovider.io/creatloadbalancer-extra-param-dsr"] = "true"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck"] = "true"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-protocols"] = "HTTP,HTTPS"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-ports"] = "8080:30001,8443:30002"
@@ -335,6 +334,115 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
 							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+			},
+		},
+		{
+			name: "update already created load balancer and modify health check for load balancer pools only once",
+			calls: []consecutiveCall{
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Spec.Ports = []corev1.ServicePort{{Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
+							{Command: "listNetworks"},
+							{Command: "associateIpAddress"},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "publicport": []string{"8080"}, "additionalportmap": []string{"8443:30002"}, "privateport": []string{"30001"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Annotations["csccm.cloudprovider.io/creatloadbalancer-extra-param-dsr"] = "true"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck"] = "true"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-protocols"] = "HTTP,HTTPS"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-ports"] = "8080:30001,8443:30002"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msgs"] = "GET / HTTP/1.0,GET /test HTTP/1.0"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsps"] = "200 OK,bleh"
+						svc.Spec.Ports = []corev1.ServicePort{{Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
+							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"0"}, "healthchecktype": []string{"HTTP"}, "healthcheck": []string{"GET / HTTP/1.0"}, "expectedhealthcheck": []string{"200 OK"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"bleh"}}},
+							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Annotations["csccm.cloudprovider.io/creatloadbalancer-extra-param-dsr"] = "true"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck"] = "true"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-protocols"] = "HTTP,HTTPS"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-ports"] = "8080:30001,8443:30002"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msgs"] = "GET / HTTP/1.0,GET /test HTTP/1.0"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsps"] = "200 OK,bleh"
+						svc.Spec.Ports = []corev1.ServicePort{{Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
 						})
 					},
 				},

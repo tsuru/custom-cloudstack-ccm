@@ -30,6 +30,10 @@ type globoNetworkPoolsResponse struct {
 	GloboNetworkPools []*globoNetworkPool `json:"globonetworkpool"`
 }
 
+type UpdateGloboNetworkPoolResponse struct {
+	JobID string `json:"jobid"`
+}
+
 type globoNetworkPool struct {
 	Port                int    `json:"port"`
 	VipPort             int    `json:"vipport"`
@@ -231,6 +235,44 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.lbRules[lbName].Rule["algorithm"] = algorithm
 			return s.lbRules[lbName]
 		}
+
+	case "updateGloboNetworkPool":
+		lbRuleID := r.FormValue("lbruleid")
+		poolID, _ := strconv.Atoi(r.FormValue("poolids"))
+		healthCheckType := r.FormValue("healthchecktype")
+		healthCheckProtocol := r.FormValue("healthcheck")
+		healthCheckExpected := r.FormValue("expectedhealthcheck")
+
+		lbName := s.lbNameByID(lbRuleID)
+		if lbName == "" {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write(ErrorResponse("updateGloboNetworkPoolResponse", fmt.Sprintf("lb not found with id %v", lbRuleID)))
+			return
+		}
+		if len(s.lbRules[lbName].Pools) == 0 {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write(ErrorResponse("updateGloboNetworkPoolResponse", fmt.Sprintf("pool %v for lb %v not found", lbRuleID, lbName)))
+			return
+		}
+		for idx, pool := range s.lbRules[lbName].Pools {
+			if pool.Id == poolID {
+				ruleIdx := s.newID(cmd)
+				obj := UpdateGloboNetworkPoolResponse{
+					JobID: fmt.Sprintf("job-lbrule-pool-update-%d", ruleIdx),
+				}
+				w.Write(MarshalResponse("updateGloboNetworkPoolResponse", obj))
+				s.Jobs[obj.JobID] = func() interface{} {
+					s.lbRules[lbName].Pools[idx].HealthCheck = healthCheckProtocol
+					s.lbRules[lbName].Pools[idx].HealthCheckType = healthCheckType
+					s.lbRules[lbName].Pools[idx].HealthCheckExpected = healthCheckExpected
+					return s.lbRules[lbName]
+				}
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+		w.Write(ErrorResponse("updateGloboNetworkPoolResponse", fmt.Sprintf("pool %v for lb %v not found", lbRuleID, lbName)))
+		return
 
 	case "createLoadBalancerRule":
 		lbname := r.FormValue("name")
