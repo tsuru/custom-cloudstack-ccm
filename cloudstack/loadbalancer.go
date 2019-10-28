@@ -38,12 +38,9 @@ const (
 
 	associateIPAddressExtraParamPrefix = "csccm.cloudprovider.io/associateipaddress-extra-param-"
 	createLoadBalancerExtraParamPrefix = "csccm.cloudprovider.io/createloadbalancer-extra-param-"
-
-	lbCustomHealthCheck          = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck"
-	lbCustomHealthCheckProtocols = "csccm.cloudprovider.io/loadbalancer-custom-protocols"
-	lbCustomHealthCheckPorts     = "csccm.cloudprovider.io/loadbalancer-custom-ports"
-	lbCustomHealthCheckMessages  = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msgs"
-	lbCustomHealthCheckResponses = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsps"
+	lbCustomHealthCheck                = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck"
+	lbCustomHealthCheckMessagePrefix   = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-"
+	lbCustomHealthCheckResponsePrefix  = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-"
 
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
@@ -1046,15 +1043,13 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		return err
 	}
 
-	healthCheckRequiredLabels := []string{lbCustomHealthCheckProtocols, lbCustomHealthCheckPorts, lbCustomHealthCheckMessages, lbCustomHealthCheckResponses}
-	_, lbCustomHealthCheckVal := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheck)
-	if !lbCustomHealthCheckVal && !checkRequiredLabelsOrAnnotations(service, healthCheckRequiredLabels) {
-		klog.V(4).Infof("Custom healthcheck for %s set but missing required labels/annotations", lbRule.Name)
-		return nil
-	}
-
 	listGloboNetworkPoolsParams := &cloudstack.CustomServiceParams{}
 	listGloboNetworkPoolsResponse := globoNetworkPools{}
+
+	_, lbCustomHealthCheckVal := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheck)
+	if !lbCustomHealthCheckVal {
+		return nil
+	}
 
 	listGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
 	err = client.Custom.CustomRequest("listGloboNetworkPools", listGloboNetworkPoolsParams, &listGloboNetworkPoolsResponse)
@@ -1067,15 +1062,12 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		return nil
 	}
 
-	lbPorts, _ := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheckPorts)
 	updateGloboNetworkPoolsParams := &cloudstack.CustomServiceParams{}
 
-	idx := 0
 	r := UpdateGloboNetworkPoolResponse{}
-	for _, portPair := range strings.Split(lbPorts, ",") {
-		pool, err := generateGloboNetworkPool(idx, portPair, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
+	for idx := range service.Spec.Ports {
+		pool, err := generateGloboNetworkPool(idx, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
 		if pool == (globoNetworkPool{}) {
-			idx++
 			continue
 		}
 		if err != nil {
@@ -1096,33 +1088,40 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 				return fmt.Errorf("error waiting for globo network pool for rule %v: %v", lbRule.Name, err)
 			}
 		}
-		idx++
 	}
 	return nil
 }
 
-func generateGloboNetworkPool(poolIdx int, ports string, service *v1.Service, globoPools []*globoNetworkPool) (globoNetworkPool, error) {
-	portList := strings.Split(ports, ":")
-	healthCheckProtocolsList, _ := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheckProtocols)
-	healthCheckResponsesList, _ := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheckResponses)
-	healthCheckMessagesList, _ := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheckMessages)
-	vipPort, err := strconv.Atoi(portList[0])
-	if err != nil {
-		return globoNetworkPool{}, fmt.Errorf("error converting %v to int", portList[0])
+func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*globoNetworkPool) (globoNetworkPool, error) {
+	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
+	ports := service.Spec.Ports
+	dstPort := int(ports[portsIdx].NodePort)
+	vipPort := int(ports[portsIdx].Port)
+
+	if useTargetPort {
+		dstPort = ports[portsIdx].TargetPort.IntValue()
 	}
-	dstPort, err := strconv.Atoi(portList[1])
-	if err != nil {
-		return globoNetworkPool{}, fmt.Errorf("error converting %v to int", portList[1])
+
+	if ports[portsIdx].Name == "" || !strings.Contains(ports[portsIdx].Name, "-") {
+		return globoNetworkPool{}, nil
+	}
+
+	namedService := ports[portsIdx].Name
+	protocol := strings.Split(namedService, "-")[0]
+	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
+	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
+	if healthCheckMessage == "" || healthCheckResponse == "" {
+		return globoNetworkPool{}, nil
 	}
 
 	for _, pool := range globoPools {
 		if (pool.VipPort == vipPort && pool.Port == dstPort) &&
-			(pool.HealthCheck != strings.Split(healthCheckMessagesList, ",")[poolIdx] ||
-				pool.HealthCheckExpected != strings.Split(healthCheckResponsesList, ",")[poolIdx] ||
-				pool.HealthCheckType != strings.Split(healthCheckProtocolsList, ",")[poolIdx]) {
-			pool.HealthCheck = strings.Split(healthCheckMessagesList, ",")[poolIdx]
-			pool.HealthCheckExpected = strings.Split(healthCheckResponsesList, ",")[poolIdx]
-			pool.HealthCheckType = strings.Split(healthCheckProtocolsList, ",")[poolIdx]
+			(pool.HealthCheck != healthCheckMessage ||
+				pool.HealthCheckExpected != healthCheckResponse ||
+				pool.HealthCheckType != protocol) {
+			pool.HealthCheck = healthCheckMessage
+			pool.HealthCheckExpected = healthCheckResponse
+			pool.HealthCheckType = protocol
 			return *pool, nil
 		}
 	}
