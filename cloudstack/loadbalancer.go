@@ -1067,11 +1067,11 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	r := UpdateGloboNetworkPoolResponse{}
 	for idx := range service.Spec.Ports {
 		pool, err := generateGloboNetworkPool(idx, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
-		if pool == (globoNetworkPool{}) {
-			continue
-		}
 		if err != nil {
 			return fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRule.Name, err)
+		}
+		if pool == nil {
+			continue
 		}
 		updateGloboNetworkPoolsParams.SetParam("poolids", pool.Id)
 		updateGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
@@ -1092,7 +1092,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	return nil
 }
 
-func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*globoNetworkPool) (globoNetworkPool, error) {
+func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*globoNetworkPool) (*globoNetworkPool, error) {
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	ports := service.Spec.Ports
 	dstPort := int(ports[portsIdx].NodePort)
@@ -1103,7 +1103,7 @@ func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*g
 	}
 
 	if ports[portsIdx].Name == "" || !strings.Contains(ports[portsIdx].Name, "-") {
-		return globoNetworkPool{}, nil
+		return nil, nil
 	}
 
 	namedService := ports[portsIdx].Name
@@ -1111,7 +1111,7 @@ func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*g
 	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
 	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
 	if healthCheckMessage == "" || healthCheckResponse == "" {
-		return globoNetworkPool{}, nil
+		return nil, nil
 	}
 
 	for _, pool := range globoPools {
@@ -1122,10 +1122,10 @@ func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*g
 			pool.HealthCheck = healthCheckMessage
 			pool.HealthCheckExpected = healthCheckResponse
 			pool.HealthCheckType = protocol
-			return *pool, nil
+			return pool, nil
 		}
 	}
-	return globoNetworkPool{}, nil
+	return nil, nil
 }
 
 // deleteLoadBalancerRule deletes a load balancer rule.
