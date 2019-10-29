@@ -1037,22 +1037,20 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 }
 
 func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service *v1.Service) error {
-
 	client, err := lb.getClient()
 	if err != nil {
 		return err
 	}
-
-	listGloboNetworkPoolsParams := &cloudstack.CustomServiceParams{}
-	listGloboNetworkPoolsResponse := globoNetworkPools{}
 
 	_, lbCustomHealthCheckVal := getLabelOrAnnotation(service.ObjectMeta, lbCustomHealthCheck)
 	if !lbCustomHealthCheckVal {
 		return nil
 	}
 
+	listGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
+	listGloboNetworkPoolsResponse := globoNetworkPools{}
 	listGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
-	err = client.Custom.CustomRequest("listGloboNetworkPools", listGloboNetworkPoolsParams, &listGloboNetworkPoolsResponse)
+	err = client.Custom.CustomRequest("listGloboNetworkPools", &listGloboNetworkPoolsParams, &listGloboNetworkPoolsResponse)
 
 	if err != nil {
 		return fmt.Errorf("error list load balancer pools for %v: %v", lbRule.Name, err)
@@ -1062,8 +1060,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		return nil
 	}
 
-	updateGloboNetworkPoolsParams := &cloudstack.CustomServiceParams{}
-
+	updateGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
 	r := UpdateGloboNetworkPoolResponse{}
 	for idx := range service.Spec.Ports {
 		pool, err := generateGloboNetworkPool(idx, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
@@ -1078,7 +1075,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		updateGloboNetworkPoolsParams.SetParam("healthchecktype", strings.ToUpper(pool.HealthCheckType))
 		updateGloboNetworkPoolsParams.SetParam("healthcheck", pool.HealthCheck)
 		updateGloboNetworkPoolsParams.SetParam("expectedhealthcheck", pool.HealthCheckExpected)
-		err = client.Custom.CustomRequest("updateGloboNetworkPool", updateGloboNetworkPoolsParams, &r)
+		err = client.Custom.CustomRequest("updateGloboNetworkPool", &updateGloboNetworkPoolsParams, &r)
 		if err != nil {
 			return fmt.Errorf("error updating globo network pool for %v: %v", lbRule.Name, err)
 		}
