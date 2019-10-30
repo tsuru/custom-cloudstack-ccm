@@ -1099,7 +1099,7 @@ func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*g
 		dstPort = ports[portsIdx].TargetPort.IntValue()
 	}
 
-	if ports[portsIdx].Name == "" || !strings.Contains(ports[portsIdx].Name, "-") {
+	if ports[portsIdx].Name == "" {
 		return nil, nil
 	}
 

@@ -287,11 +287,11 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck"] = "true"
-						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-http-foo"] = "GET / HTTP/1.0"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-http"] = "GET / HTTP/1.0"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-https-bar"] = "GET /test HTTP/1.0"
-						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-http-foo"] = "200 OK"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-http"] = "200 OK"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-https-bar"] = "bleh"
-						svc.Spec.Ports = []corev1.ServicePort{{Name: "http-foo", Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+						svc.Spec.Ports = []corev1.ServicePort{{Name: "http", Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
 							{Name: "https-bar", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
