@@ -1,6 +1,7 @@
 package cloudstack
 
 import (
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,29 +19,29 @@ func Test_CSCloud_nodeAddresses(t *testing.T) {
 	}{
 		{
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 				},
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 			},
 		},
 		{
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 				},
 				Publicip: "200.0.0.1",
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeExternalIP, Address: "200.0.0.1"},
 			},
 		},
@@ -50,15 +51,15 @@ func Test_CSCloud_nodeAddresses(t *testing.T) {
 				ExternalIPIndex: 0,
 			},
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 				},
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 			},
 		},
 		{
@@ -67,16 +68,16 @@ func Test_CSCloud_nodeAddresses(t *testing.T) {
 				ExternalIPIndex: 0,
 			},
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 				},
 				Publicip: "200.0.0.1",
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeExternalIP, Address: "200.0.0.1"},
 			},
 		},
@@ -86,16 +87,16 @@ func Test_CSCloud_nodeAddresses(t *testing.T) {
 				ExternalIPIndex: 0,
 			},
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 					{Ipaddress: "192.0.0.1"},
 				},
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "192.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeExternalIP, Address: "10.0.0.1"},
 			},
 		},
@@ -104,32 +105,51 @@ func Test_CSCloud_nodeAddresses(t *testing.T) {
 				InternalIPIndex: 9,
 			},
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 					{Ipaddress: "192.0.0.1"},
 				},
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 			},
 		},
 		{
 			config: globalConfig{},
 			vm: cloudstack.VirtualMachine{
-				Id:   "vm1",
-				Name: "host1",
+				Id:       "vm1",
+				Hostname: "host1",
 				Nic: []cloudstack.Nic{
 					{Ipaddress: "10.0.0.1"},
 					{Ipaddress: "192.0.0.1"},
 				},
 			},
 			expected: []v1.NodeAddress{
-				{Type: v1.NodeHostName, Address: "host1"},
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: v1.NodeHostName, Address: "host1"},
 			},
+		},
+		{
+			config: globalConfig{},
+			vm: cloudstack.VirtualMachine{
+				Id: "vm1",
+				Nic: []cloudstack.Nic{
+					{Ipaddress: "127.0.0.1"},
+				},
+			},
+			expected: func() []v1.NodeAddress {
+				addrs, _ := net.LookupAddr("127.0.0.1")
+				result := []v1.NodeAddress{
+					{Type: v1.NodeInternalIP, Address: "127.0.0.1"},
+				}
+				for _, addr := range addrs {
+					result = append(result, v1.NodeAddress{Type: v1.NodeHostName, Address: addr})
+				}
+				return result
+			}(),
 		},
 	}
 
