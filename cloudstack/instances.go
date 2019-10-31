@@ -20,7 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
+	"time"
 
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	v1 "k8s.io/api/core/v1"
@@ -76,9 +78,7 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 		return nil, errors.New("instance does not have an internal IP")
 	}
 
-	addresses := []v1.NodeAddress{
-		{Type: v1.NodeHostName, Address: instance.Name},
-	}
+	var addresses []v1.NodeAddress
 
 	var internalAddr string
 	internalIndex := cs.config.Global.InternalIPIndex
@@ -88,6 +88,15 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 	}
 	internalAddr = instance.Nic[internalIndex].Ipaddress
 	addresses = append(addresses, v1.NodeAddress{Type: v1.NodeInternalIP, Address: internalAddr})
+
+	if instance.Hostname != "" {
+		addresses = append(addresses, v1.NodeAddress{Type: v1.NodeHostName, Address: instance.Hostname})
+	} else {
+		names := lookupAddrWithTimeout(internalAddr)
+		for _, name := range names {
+			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeHostName, Address: name})
+		}
+	}
 
 	externalIIndex := cs.config.Global.ExternalIPIndex
 	if externalIIndex != internalIndex && externalIIndex >= 0 && externalIIndex < len(instance.Nic) {
@@ -317,4 +326,11 @@ func getLabelOrAnnotation(obj metav1.ObjectMeta, name string) (string, bool) {
 	}
 	n, ok := obj.Annotations[name]
 	return n, ok
+}
+
+func lookupAddrWithTimeout(addr string) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	names, _ := net.DefaultResolver.LookupAddr(ctx, addr)
+	return names
 }
