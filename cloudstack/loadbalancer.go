@@ -1025,6 +1025,7 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 			Publicport:  r.Publicport,
 			Publicip:    r.Publicip,
 			Publicipid:  r.Publicipid,
+			Zoneid:      r.Zoneid,
 		},
 	}
 
@@ -1050,6 +1051,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	listGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
 	listGloboNetworkPoolsResponse := globoNetworkPools{}
 	listGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
+	listGloboNetworkPoolsParams.SetParam("zoneid", lbRule.Zoneid)
 	err = client.Custom.CustomRequest("listGloboNetworkPools", &listGloboNetworkPoolsParams, &listGloboNetworkPoolsResponse)
 
 	if err != nil {
@@ -1075,6 +1077,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		updateGloboNetworkPoolsParams.SetParam("healthchecktype", strings.ToUpper(pool.HealthCheckType))
 		updateGloboNetworkPoolsParams.SetParam("healthcheck", pool.HealthCheck)
 		updateGloboNetworkPoolsParams.SetParam("expectedhealthcheck", pool.HealthCheckExpected)
+		updateGloboNetworkPoolsParams.SetParam("zoneid", lbRule.Zoneid)
 		err = client.Custom.CustomRequest("updateGloboNetworkPool", &updateGloboNetworkPoolsParams, &r)
 		if err != nil {
 			return fmt.Errorf("error updating globo network pool for %v: %v", lbRule.Name, err)
