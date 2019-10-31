@@ -1078,6 +1078,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		updateGloboNetworkPoolsParams.SetParam("healthcheck", pool.HealthCheck)
 		updateGloboNetworkPoolsParams.SetParam("expectedhealthcheck", pool.HealthCheckExpected)
 		updateGloboNetworkPoolsParams.SetParam("zoneid", lbRule.Zoneid)
+		updateGloboNetworkPoolsParams.SetParam("maxconn", 0)
 		err = client.Custom.CustomRequest("updateGloboNetworkPool", &updateGloboNetworkPoolsParams, &r)
 		if err != nil {
 			return fmt.Errorf("error updating globo network pool for %v: %v", lbRule.Name, err)
