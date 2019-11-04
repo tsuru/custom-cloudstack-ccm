@@ -281,8 +281,73 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			},
 		},
 		{
-			name: "create load balancer and modify health check for all created load balancer pool",
+			name: "create load balancer and modify health check for all created load balancer pool, but fail at the first attempt",
+			hook: func(t *testing.T, srv *cloudstackFake.CloudstackServer) {
+				calls := 0
+				srv.Hook = func(w http.ResponseWriter, r *http.Request) bool {
+					cmd := r.FormValue("command")
+					if cmd == "assignToLoadBalancerRule" && calls == 0 {
+						srv.SetDefaultLBPoolCreation(r.FormValue("id"))
+						calls++
+					}
+					if cmd == "listGloboNetworkPools" && calls == 1 {
+						calls++
+						return false
+					}
+					if cmd == "listGloboNetworkPools" && calls == 2 {
+						srv.SetDefaultLBPoolCreation(r.FormValue("lbruleid"))
+						calls++
+					}
+					return false
+				}
+			},
 			calls: []consecutiveCall{
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck"] = "true"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-http"] = "GET / HTTP/1.0"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-https-bar"] = "GET /test HTTP/1.0"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-http"] = "200 OK"
+						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-https-bar"] = "bleh"
+						svc.Spec.Ports = []corev1.ServicePort{{Name: "http", Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+							{Name: "https-bar", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						require.Error(t, err)
+						assert.Contains(t, err.Error(), "error list load balancer pools for svc1.test.com: no LB pools found")
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
+							{Command: "listNetworks"},
+							{Command: "associateIpAddress", Params: url.Values{"lbenvironmentid": []string{"1"}, "networkid": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
+							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
+						})
+					},
+				},
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
@@ -305,34 +370,11 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
-							{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
-							{Command: "listPublicIpAddresses", Params: url.Values{"tags[0].key": nil, "tags[1].key": nil, "tags[2].key": nil}},
-							{Command: "listNetworks"},
-							{Command: "associateIpAddress", Params: url.Values{"lbenvironmentid": []string{"1"}, "networkid": []string{"net1"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createTags", Params: url.Values{"resourceids": []string{"ip-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
-							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
 							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
 							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"0"}, "healthchecktype": []string{"HTTP"}, "healthcheck": []string{"GET / HTTP/1.0"}, "expectedhealthcheck": []string{"200 OK"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"bleh"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"0"}, "id": []string{"lbrule-1"}}},
-							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
-							{Command: "queryAsyncJobResult"},
-							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
 							{Command: "queryAsyncJobResult"},
 						})
 					},
@@ -375,9 +417,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"30001"}}},
 							{Command: "queryAsyncJobResult"},
-							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
-							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"200 OK"}}},
-							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
@@ -388,6 +427,9 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
+							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"200 OK"}}},
 							{Command: "queryAsyncJobResult"},
 						})
 					},
@@ -431,9 +473,6 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "createLoadBalancerRule", Params: url.Values{"name": []string{"svc1.test.com"}, "publicipid": []string{"ip-1"}, "privateport": []string{"8080"}, "additionalportmap": []string{"8443:8443"}}},
 							{Command: "queryAsyncJobResult"},
-							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
-							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"200 OK"}}},
-							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "createTags", Params: url.Values{"resourceids": []string{"lbrule-1"}, "tags[0].key": []string{"kubernetes_namespace"}, "tags[0].value": []string{"myns"}}},
@@ -444,6 +483,9 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "assignNetworkToLBRule", Params: url.Values{"id": []string{"lbrule-1"}, "networkids": []string{"net1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
+							{Command: "queryAsyncJobResult"},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
+							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"200 OK"}}},
 							{Command: "queryAsyncJobResult"},
 						})
 					},

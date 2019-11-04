@@ -21,8 +21,9 @@ type MockAPICall struct {
 }
 
 type LoadBalancerRule struct {
-	Rule  map[string]interface{}
-	Pools []globoNetworkPool
+	Rule         map[string]interface{}
+	Pools        []globoNetworkPool
+	createLBPool bool
 }
 
 type globoNetworkPoolsResponse struct {
@@ -50,7 +51,7 @@ type CloudstackServer struct {
 	idx     map[string]int
 	Jobs    map[string]func() interface{}
 	tags    map[string][]cloudstack.Tags
-	lbRules map[string]LoadBalancerRule
+	lbRules map[string]*LoadBalancerRule
 	ips     map[string]*cloudstack.PublicIpAddress
 	vms     map[string][]*cloudstack.VirtualMachine
 }
@@ -58,7 +59,7 @@ type CloudstackServer struct {
 func NewCloudstackServer() *CloudstackServer {
 	cloudstackSrv := &CloudstackServer{
 		idx:     make(map[string]int),
-		lbRules: make(map[string]LoadBalancerRule),
+		lbRules: make(map[string]*LoadBalancerRule),
 		Jobs:    make(map[string]func() interface{}),
 		tags:    make(map[string][]cloudstack.Tags),
 		ips:     make(map[string]*cloudstack.PublicIpAddress),
@@ -87,7 +88,46 @@ func (s *CloudstackServer) AddIP(ip cloudstack.PublicIpAddress) {
 }
 
 func (s *CloudstackServer) AddLBRule(lbName string, lbRule LoadBalancerRule) {
+	s.lbRules[lbName] = &lbRule
+}
+
+func (s *CloudstackServer) SetDefaultLBPoolCreation(lbId string) {
+	lbName := s.lbNameByID(lbId)
+	lbRule := s.lbRules[lbName]
+	lbRule.createLBPool = !lbRule.createLBPool
 	s.lbRules[lbName] = lbRule
+}
+
+func (s *CloudstackServer) createDefaultLBPools(lbId string) {
+	lbName := s.lbNameByID(lbId)
+	lbRule := s.lbRules[lbName]
+	publicPort, _ := strconv.Atoi(lbRule.Rule["publicport"].(string))
+	privatePort, _ := strconv.Atoi(lbRule.Rule["privateport"].(string))
+	protocol := lbRule.Rule["protocol"].(string)
+	createDefaultLBPool := lbRule.createLBPool
+	if len(lbRule.Pools) < 1 && createDefaultLBPool {
+		lbRule.Pools = append(lbRule.Pools, globoNetworkPool{
+			Id:              0,
+			VipPort:         publicPort,
+			Port:            privatePort,
+			HealthCheckType: protocol,
+		})
+		if additionalPortMap, ok := lbRule.Rule["additionalportmap"].([]string); ok {
+			for idx, portPair := range additionalPortMap {
+				if !strings.Contains(portPair, ":") {
+					continue
+				}
+				additionalPublicPort, _ := strconv.Atoi(strings.Split(portPair, ":")[0])
+				additionalPrivatePort, _ := strconv.Atoi(strings.Split(portPair, ":")[1])
+				lbRule.Pools = append(lbRule.Pools, globoNetworkPool{
+					Id:              idx + 1,
+					VipPort:         additionalPublicPort,
+					Port:            additionalPrivatePort,
+					HealthCheckType: protocol,
+				})
+			}
+		}
+	}
 }
 
 func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +170,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "listGloboNetworkPools":
 		lbruleid := r.FormValue("lbruleid")
+		s.createDefaultLBPools(lbruleid)
 		for _, lb := range s.lbRules {
 			if lb.Rule["id"] == lbruleid {
 				w.Write(MarshalResponse("listGloboNetworkPoolResponse", map[string]interface{}{
@@ -284,6 +325,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ruleIdx := s.newID(cmd)
 		jobID := fmt.Sprintf("job-lbrule-%d", ruleIdx)
 		obj := LoadBalancerRule{
+			createLBPool: true,
 			Rule: map[string]interface{}{
 				"id":    fmt.Sprintf("lbrule-%d", ruleIdx),
 				"jobid": jobID},
@@ -304,31 +346,11 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		obj.Rule["protocol"] = r.FormValue("protocol")
 		obj.Rule["openfirewall"], _ = strconv.ParseBool(r.FormValue("openfirewall"))
 		obj.Rule["publicip"] = ipObj.Ipaddress
-		publicPort, _ := strconv.Atoi(obj.Rule["publicport"].(string))
-		privatePort, _ := strconv.Atoi(obj.Rule["privateport"].(string))
-		obj.Pools = append(obj.Pools, globoNetworkPool{
-			Id:              0,
-			VipPort:         publicPort,
-			Port:            privatePort,
-			HealthCheckType: obj.Rule["protocol"].(string),
-		})
 		if additionalPorts := r.FormValue("additionalportmap"); additionalPorts != "" {
-			obj.Rule["additionalportmap"] = strings.Split(r.FormValue("additionalportmap"), ",")
-			addPortIdx := 1
-			for _, portPair := range obj.Rule["additionalportmap"].([]string) {
-				additionalPublicPort, _ := strconv.Atoi(strings.Split(portPair, ":")[0])
-				additionalPrivatePort, _ := strconv.Atoi(strings.Split(portPair, ":")[1])
-				obj.Pools = append(obj.Pools, globoNetworkPool{
-					Id:              addPortIdx,
-					VipPort:         additionalPublicPort,
-					Port:            additionalPrivatePort,
-					HealthCheckType: obj.Rule["protocol"].(string),
-				})
-				addPortIdx++
-			}
+			obj.Rule["additionalportmap"] = strings.Split(additionalPorts, ",")
 		}
 		s.Jobs[jobID] = func() interface{} {
-			s.lbRules[lbname] = obj
+			s.lbRules[lbname] = &obj
 			return obj.Rule
 		}
 
