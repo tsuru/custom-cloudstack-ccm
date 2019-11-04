@@ -233,6 +233,10 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, err
 	}
 
+	if err = lb.updateLoadBalancerPool(lb.rule, service); err != nil {
+		return nil, err
+	}
+
 	return status, nil
 }
 
@@ -1029,11 +1033,6 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 		},
 	}
 
-	err = lb.updateLoadBalancerPool(lbRule, service)
-	if err != nil {
-		return nil, fmt.Errorf("updateLoadBalacerPool error: %v", err)
-	}
-
 	return lbRule, nil
 }
 
@@ -1052,6 +1051,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	listGloboNetworkPoolsResponse := globoNetworkPools{}
 	listGloboNetworkPoolsParams.SetParam("lbruleid", lbRule.Id)
 	listGloboNetworkPoolsParams.SetParam("zoneid", lbRule.Zoneid)
+
 	err = client.Custom.CustomRequest("listGloboNetworkPools", &listGloboNetworkPoolsParams, &listGloboNetworkPoolsResponse)
 
 	if err != nil {
@@ -1059,7 +1059,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	}
 
 	if listGloboNetworkPoolsResponse.Count < 1 {
-		return nil
+		return fmt.Errorf("error list load balancer pools for %v: no LB pools found", lbRule.Name)
 	}
 
 	updateGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
