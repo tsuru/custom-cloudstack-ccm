@@ -105,28 +105,31 @@ func (s *CloudstackServer) createDefaultLBPools(lbId string) {
 	privatePort, _ := strconv.Atoi(lbRule.Rule["privateport"].(string))
 	protocol := lbRule.Rule["protocol"].(string)
 	createDefaultLBPool := lbRule.createLBPool
-	if len(lbRule.Pools) < 1 && createDefaultLBPool {
+	if len(lbRule.Pools) > 1 || !createDefaultLBPool {
+		return
+	}
+	lbRule.Pools = append(lbRule.Pools, globoNetworkPool{
+		Id:              0,
+		VipPort:         publicPort,
+		Port:            privatePort,
+		HealthCheckType: protocol,
+	})
+	additionalPortMap, ok := lbRule.Rule["additionalportmap"].([]string)
+	if !ok {
+		return
+	}
+	for idx, portPair := range additionalPortMap {
+		if !strings.Contains(portPair, ":") {
+			continue
+		}
+		additionalPublicPort, _ := strconv.Atoi(strings.Split(portPair, ":")[0])
+		additionalPrivatePort, _ := strconv.Atoi(strings.Split(portPair, ":")[1])
 		lbRule.Pools = append(lbRule.Pools, globoNetworkPool{
-			Id:              0,
-			VipPort:         publicPort,
-			Port:            privatePort,
+			Id:              idx + 1,
+			VipPort:         additionalPublicPort,
+			Port:            additionalPrivatePort,
 			HealthCheckType: protocol,
 		})
-		if additionalPortMap, ok := lbRule.Rule["additionalportmap"].([]string); ok {
-			for idx, portPair := range additionalPortMap {
-				if !strings.Contains(portPair, ":") {
-					continue
-				}
-				additionalPublicPort, _ := strconv.Atoi(strings.Split(portPair, ":")[0])
-				additionalPrivatePort, _ := strconv.Atoi(strings.Split(portPair, ":")[1])
-				lbRule.Pools = append(lbRule.Pools, globoNetworkPool{
-					Id:              idx + 1,
-					VipPort:         additionalPublicPort,
-					Port:            additionalPrivatePort,
-					HealthCheckType: protocol,
-				})
-			}
-		}
 	}
 }
 
