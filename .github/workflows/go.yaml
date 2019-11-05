@@ -1,0 +1,46 @@
+name: Go
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+    - uses: actions/checkout@v1
+
+    - run: make test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+    - uses: actions/checkout@v1
+
+    - run: make lint
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+    - uses: actions/checkout@v1
+
+    - name: docker login
+      uses: azure/docker-login@v1
+      with:
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+
+    - name: push tag to docker
+      if: startsWith(github.ref, 'refs/tags/')
+      run: make TAG=${GITHUB_REF/refs\/tags\//} push
+
+    - name: push latest to docker
+      if: contains(github.ref, 'refs/heads/master')
+      run: make push
