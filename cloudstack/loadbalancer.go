@@ -880,9 +880,11 @@ func comparePorts(service *v1.Service, rule *loadBalancerRule, lb *loadBalancer)
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	sortPorts(ports)
 	var additionalPorts []string
+	var targetPort int
+	var err error
 	for _, p := range ports[1:] {
 		if useTargetPort {
-			targetPort, err := lb.getTargetPort(p.TargetPort, service)
+			targetPort, err = lb.getTargetPort(p.TargetPort, service)
 			if err != nil {
 				return false, fmt.Errorf("Error resolving target port: %v", err)
 			}
@@ -897,8 +899,12 @@ func comparePorts(service *v1.Service, rule *loadBalancerRule, lb *loadBalancer)
 		rule.AdditionalPortMap = nil
 	}
 	if useTargetPort {
+		targetPort, err = lb.getTargetPort(ports[0].TargetPort, service)
+		if err != nil {
+			return false, fmt.Errorf("Error resolving target port: %v", err)
+		}
 		return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
-			rule.Privateport == strconv.Itoa(int(ports[0].TargetPort.IntValue())) &&
+			rule.Privateport == strconv.Itoa(targetPort) &&
 			rule.Publicport == strconv.Itoa(int(ports[0].Port)), nil
 	}
 	return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
@@ -967,6 +973,7 @@ func (lb *loadBalancer) updateLoadBalancerRule(service *v1.Service) error {
 func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Service) (*loadBalancerRule, error) {
 	ports := service.Spec.Ports
 	client, err := lb.getClient()
+	var targetPort int
 	if err != nil {
 		return nil, err
 	}
@@ -982,7 +989,6 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	p.SetParam("privateport", int(ports[0].NodePort))
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	if useTargetPort {
-		var targetPort int
 		if targetPort, err = lb.getTargetPort(ports[0].TargetPort, service); err != nil {
 			return nil, fmt.Errorf("error getting target port: %v", err)
 		}
@@ -1004,7 +1010,10 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	var additionalPorts []string
 	for _, p := range ports[1:] {
 		if useTargetPort {
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.TargetPort.IntValue()))
+			if targetPort, err = lb.getTargetPort(p.TargetPort, service); err != nil {
+				return nil, fmt.Errorf("error getting target port: %v", err)
+			}
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, targetPort))
 		} else {
 			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
 		}
@@ -1079,7 +1088,7 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	updateGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
 	r := UpdateGloboNetworkPoolResponse{}
 	for idx := range service.Spec.Ports {
-		pool, err := generateGloboNetworkPool(idx, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
+		pool, err := lb.generateGloboNetworkPool(idx, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
 		if err != nil {
 			return fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRule.Name, err)
 		}
@@ -1107,14 +1116,17 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	return nil
 }
 
-func generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*globoNetworkPool) (*globoNetworkPool, error) {
+func (lb *loadBalancer) generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*globoNetworkPool) (*globoNetworkPool, error) {
+	var err error
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	ports := service.Spec.Ports
 	dstPort := int(ports[portsIdx].NodePort)
 	vipPort := int(ports[portsIdx].Port)
 
 	if useTargetPort {
-		dstPort = ports[portsIdx].TargetPort.IntValue()
+		if dstPort, err = lb.getTargetPort(ports[portsIdx].TargetPort, service); err != nil {
+			return nil, err
+		}
 	}
 
 	if ports[portsIdx].Name == "" {
