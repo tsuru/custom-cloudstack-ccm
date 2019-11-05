@@ -18,6 +18,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	kubeFake "k8s.io/client-go/kubernetes/fake"
 )
 
 func init() {
@@ -1353,6 +1354,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		deleteCalled bool
 		errorMatches string
 		annotations  map[string]string
+		prepend      *kubeFake.Clientset
 	}{
 		{
 			existing:    false,
@@ -1526,6 +1528,75 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			needsUpdate:  false,
 			deleteCalled: false,
 		},
+		{
+			prepend: kubeFake.NewSimpleClientset(&corev1.EndpointsList{
+				Items: []corev1.Endpoints{
+					{ObjectMeta: metav1.ObjectMeta{
+						Name:      serviceTag,
+						Namespace: namespaceTag,
+					},
+						Subsets: []corev1.EndpointSubset{{Ports: []corev1.EndpointPort{{Name: "http", Port: 8080}, {Name: "https", Port: 8443}}}}},
+				}}),
+			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
+			svcPorts: []corev1.ServicePort{
+				{Port: 80, NodePort: 2, TargetPort: intstr.FromString("http")},
+				{Port: 443, NodePort: 20, TargetPort: intstr.FromString("https")},
+				{Port: 3, NodePort: 30, TargetPort: intstr.FromString("40")},
+				{Port: 4, NodePort: 30, TargetPort: intstr.FromInt(50)},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{
+					"4:50",
+					"80:8080",
+					"443:8443",
+				},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
+					Publicport:  "3",
+					Privateport: "40",
+					Tags: []cloudstack.Tags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
+				},
+			},
+			existing:     true,
+			needsUpdate:  false,
+			deleteCalled: false,
+		},
+		{
+			prepend: kubeFake.NewSimpleClientset(&corev1.EndpointsList{
+				Items: []corev1.Endpoints{
+					{ObjectMeta: metav1.ObjectMeta{
+						Name:      serviceTag,
+						Namespace: namespaceTag,
+					},
+						Subsets: []corev1.EndpointSubset{{Ports: []corev1.EndpointPort{{Name: "https", Port: 8443}}}}},
+				}}),
+			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
+			svcPorts: []corev1.ServicePort{
+				{Port: 80, NodePort: 2, TargetPort: intstr.FromString("http")},
+				{Port: 443, NodePort: 20, TargetPort: intstr.FromString("https")},
+				{Port: 3, NodePort: 30, TargetPort: intstr.FromString("40")},
+			},
+			rule: &loadBalancerRule{
+				AdditionalPortMap: []string{
+					"80:8080",
+					"443:8443",
+				},
+				LoadBalancerRule: &cloudstack.LoadBalancerRule{
+					Name:        "test",
+					Publicport:  "3",
+					Privateport: "40",
+					Tags: []cloudstack.Tags{
+						{Key: serviceTag}, {Key: cloudProviderTag}, {Key: namespaceTag},
+					},
+				},
+			},
+			existing:     false,
+			needsUpdate:  false,
+			deleteCalled: false,
+			errorMatches: "Error resolving target port: no port name \"http\" found for endpoint service kubernetes_service on namespace kubernetes_namespace",
+		},
 	}
 
 	var deleteCalled bool
@@ -1545,6 +1616,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 	}
 	for i, tt := range tests {
 		deleteCalled = false
+		if tt.prepend != nil {
+			cloud.kubeClient = tt.prepend
+		}
 		lb := loadBalancer{
 			name: "test",
 			cloud: &projectCloud{
@@ -1554,7 +1628,8 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			rule: tt.rule,
 		}
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			existing, needsUpdate, err := lb.checkLoadBalancerRule("name", &corev1.Service{ObjectMeta: metav1.ObjectMeta{Annotations: tt.annotations}, Spec: corev1.ServiceSpec{Ports: tt.svcPorts}})
+			existing, needsUpdate, err := lb.checkLoadBalancerRule("name", &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: serviceTag, Namespace: namespaceTag, Annotations: tt.annotations},
+				Spec: corev1.ServiceSpec{Ports: tt.svcPorts}})
 			if tt.errorMatches != "" {
 				assert.Error(t, err)
 				assert.Regexp(t, tt.errorMatches, err.Error())

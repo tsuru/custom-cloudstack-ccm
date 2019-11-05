@@ -28,6 +28,8 @@ import (
 
 	"github.com/xanzy/go-cloudstack/cloudstack"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 )
 
@@ -873,14 +875,18 @@ func sortPorts(ports []v1.ServicePort) {
 	})
 }
 
-func comparePorts(service *v1.Service, rule *loadBalancerRule) bool {
+func comparePorts(service *v1.Service, rule *loadBalancerRule, lb *loadBalancer) (bool, error) {
 	ports := service.Spec.Ports
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	sortPorts(ports)
 	var additionalPorts []string
 	for _, p := range ports[1:] {
 		if useTargetPort {
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.TargetPort.IntValue()))
+			targetPort, err := lb.getTargetPort(p.TargetPort, service)
+			if err != nil {
+				return false, fmt.Errorf("Error resolving target port: %v", err)
+			}
+			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, targetPort))
 		} else {
 			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
 		}
@@ -893,11 +899,11 @@ func comparePorts(service *v1.Service, rule *loadBalancerRule) bool {
 	if useTargetPort {
 		return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
 			rule.Privateport == strconv.Itoa(int(ports[0].TargetPort.IntValue())) &&
-			rule.Publicport == strconv.Itoa(int(ports[0].Port))
+			rule.Publicport == strconv.Itoa(int(ports[0].Port)), nil
 	}
 	return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
 		rule.Privateport == strconv.Itoa(int(ports[0].NodePort)) &&
-		rule.Publicport == strconv.Itoa(int(ports[0].Port))
+		rule.Publicport == strconv.Itoa(int(ports[0].Port)), nil
 }
 
 // checkLoadBalancerRule checks if the rule already exists and if it does, if it can be updated. If
@@ -913,7 +919,11 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, service *v1.Ser
 
 	// Check if any of the values we cannot update (those that require a new
 	// load balancer rule) are changed.
-	if comparePorts(service, lb.rule) && lb.name == lb.rule.Name {
+	portDiff, err := comparePorts(service, lb.rule, lb)
+	if err != nil {
+		return false, false, err
+	}
+	if portDiff && lb.name == lb.rule.Name {
 		missingTags, err := lb.hasMissingTags()
 		if err != nil {
 			return false, false, err
@@ -972,7 +982,11 @@ func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Se
 	p.SetParam("privateport", int(ports[0].NodePort))
 	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
 	if useTargetPort {
-		p.SetParam("privateport", int(ports[0].TargetPort.IntValue()))
+		var targetPort int
+		if targetPort, err = lb.getTargetPort(ports[0].TargetPort, service); err != nil {
+			return nil, fmt.Errorf("error getting target port: %v", err)
+		}
+		p.SetParam("privateport", targetPort)
 	}
 	p.SetParam("publicport", int(ports[0].Port))
 	p.SetParam("networkid", lb.mainNetworkID)
@@ -1456,6 +1470,26 @@ func getFirstRawValue(raw json.RawMessage) (json.RawMessage, error) {
 		return v, nil
 	}
 	return nil, fmt.Errorf("Unable to extract the raw value from:\n\n%s\n\n", string(raw))
+}
+
+func (lb *loadBalancer) getTargetPort(targetPort intstr.IntOrString, service *v1.Service) (int, error) {
+	if targetPort.IntValue() > 0 {
+		return targetPort.IntValue(), nil
+	}
+	endpoint, err := lb.cloud.kubeClient.CoreV1().Endpoints(service.Namespace).Get(service.Name, metav1.GetOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("error get endpoints: %v", err)
+	}
+	if len(endpoint.Subsets) < 1 {
+		return 0, fmt.Errorf("no endpoints found for %s service on %s namespace", service.Name, service.Namespace)
+	}
+	ports := endpoint.Subsets[0].Ports
+	for _, port := range ports {
+		if port.Name == targetPort.String() {
+			return int(port.Port), nil
+		}
+	}
+	return 0, fmt.Errorf("no port name \"%s\" found for endpoint service %s on namespace %s", targetPort.StrVal, service.Name, service.Namespace)
 }
 
 func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
