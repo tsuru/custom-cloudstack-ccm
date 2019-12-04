@@ -469,14 +469,6 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 		klog.V(4).Info("skipping extractIDs for empty node slice")
 		return nil, nil, "", nil
 	}
-	hostNames := map[string]bool{}
-	for _, node := range nodes {
-		if name, ok := getLabelOrAnnotation(node.ObjectMeta, cs.config.Global.NodeNameLabel); ok {
-			hostNames[name] = true
-			continue
-		}
-		hostNames[node.Name] = true
-	}
 
 	environmentID, _ := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.config.Global.EnvironmentLabel)
 
@@ -493,34 +485,35 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 		return nil, nil, "", fmt.Errorf("unable to retrieve cloudstack client for environment %q", environmentID)
 	}
 
-	p := client.VirtualMachine.NewListVirtualMachinesParams()
-	p.SetListall(true)
-
-	if projectID != "" {
-		p.SetProjectid(projectID)
-	}
-
-	virtualMachines, err := listAllVMsPages(client, p)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("error retrieving list of hosts: %v", err)
-	}
-
 	var hostIDs []string
 	var networkIDs []string
-
 	networkMap := make(map[string]struct{})
-	// Check if the virtual machine is in the hosts slice, then add the corresponding IDs.
-	for _, vm := range virtualMachines {
-		if !hostNames[vm.Name] {
-			continue
-		}
-		hostIDs = append(hostIDs, vm.Id)
 
-		if _, ok := networkMap[vm.Nic[0].Networkid]; ok {
-			continue
+	for _, node := range nodes {
+		hostName := node.Name
+		if name, ok := getLabelOrAnnotation(node.ObjectMeta, cs.config.Global.NodeNameLabel); ok {
+			hostName = name
 		}
-		networkMap[vm.Nic[0].Networkid] = struct{}{}
-		networkIDs = append(networkIDs, vm.Nic[0].Networkid)
+
+		p := client.VirtualMachine.NewListVirtualMachinesParams()
+		p.SetName(hostName)
+		if projectID != "" {
+			p.SetProjectid(projectID)
+		}
+		vmsResponse, err := client.VirtualMachine.ListVirtualMachines(p)
+		if err != nil {
+			return nil, nil, "", err
+		}
+
+		if len(vmsResponse.VirtualMachines) == 1 {
+			vm := vmsResponse.VirtualMachines[0]
+			hostIDs = append(hostIDs, vm.Id)
+			if _, ok := networkMap[vm.Nic[0].Networkid]; ok {
+				continue
+			}
+			networkMap[vm.Nic[0].Networkid] = struct{}{}
+			networkIDs = append(networkIDs, vm.Nic[0].Networkid)
+		}
 	}
 
 	return hostIDs, networkIDs, projectID, nil

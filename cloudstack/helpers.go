@@ -50,17 +50,6 @@ func listAllPagesUnsafe(client *cloudstack.CloudStackClient, pageSize int, param
 		params.SetPage(page)
 		switch paramsTyped := params.(type) {
 
-		case *cloudstack.ListVirtualMachinesParams:
-			l, err := client.VirtualMachine.ListVirtualMachines(paramsTyped)
-			if err != nil {
-				return nil, err
-			}
-			for _, vm := range l.VirtualMachines {
-				result = append(result, vmWrapper{vm})
-			}
-			totalCount = l.Count
-			resultSize = len(l.VirtualMachines)
-
 		case *cloudstack.ListLoadBalancerRuleInstancesParams:
 			l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(paramsTyped)
 			if err != nil {
@@ -108,18 +97,6 @@ func listAllPagesUnsafe(client *cloudstack.CloudStackClient, pageSize int, param
 
 func listAllLBInstancesPages(client *cloudstack.CloudStackClient, params *cloudstack.ListLoadBalancerRuleInstancesParams) ([]*cloudstack.VirtualMachine, error) {
 	entries, err := listAllPagesUnsafe(client, 50, params)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*cloudstack.VirtualMachine, len(entries))
-	for i := range entries {
-		result[i] = entries[i].Raw().(*cloudstack.VirtualMachine)
-	}
-	return result, nil
-}
-
-func listAllVMsPages(client *cloudstack.CloudStackClient, params *cloudstack.ListVirtualMachinesParams) ([]*cloudstack.VirtualMachine, error) {
-	entries, err := listAllPagesUnsafe(client, 10, params)
 	if err != nil {
 		return nil, err
 	}
