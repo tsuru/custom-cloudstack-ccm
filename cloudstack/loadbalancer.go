@@ -500,7 +500,7 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 		p.SetProjectid(projectID)
 	}
 
-	l, err := client.VirtualMachine.ListVirtualMachines(p)
+	virtualMachines, err := listAllVMsPages(client, p)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("error retrieving list of hosts: %v", err)
 	}
@@ -510,7 +510,7 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 
 	networkMap := make(map[string]struct{})
 	// Check if the virtual machine is in the hosts slice, then add the corresponding IDs.
-	for _, vm := range l.VirtualMachines {
+	for _, vm := range virtualMachines {
 		if !hostNames[vm.Name] {
 			continue
 		}
@@ -1537,53 +1537,4 @@ func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
 		}
 	}
 	return nil
-}
-
-func listAllLBInstancesPages(client *cloudstack.CloudStackClient, params *cloudstack.ListLoadBalancerRuleInstancesParams) ([]*cloudstack.VirtualMachine, error) {
-	page := 0
-	params.SetPagesize(50)
-	var result []*cloudstack.VirtualMachine
-	for {
-		params.SetPage(page)
-		l, err := client.LoadBalancer.ListLoadBalancerRuleInstances(params)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, l.LoadBalancerRuleInstances...)
-		if len(l.LoadBalancerRuleInstances) == 0 || l.Count == len(result) {
-			break
-		}
-		page++
-	}
-	return result, nil
-}
-
-func listAllIPPages(client *cloudstack.CloudStackClient, params *cloudstack.ListPublicIpAddressesParams) ([]*cloudstack.PublicIpAddress, error) {
-	page := 0
-	params.SetPagesize(50)
-	var result []*cloudstack.PublicIpAddress
-	for {
-		params.SetPage(page)
-		l, err := client.Address.ListPublicIpAddresses(params)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, l.PublicIpAddresses...)
-		if len(l.PublicIpAddresses) == 0 || len(result) >= l.Count {
-			break
-		}
-		page++
-	}
-	// Cloudstack count can be misleading and results can arrive repeated in
-	// multiple pages so to play safe we remove duplicated entries based on ID.
-	existingSet := make(map[string]struct{})
-	uniqResult := make([]*cloudstack.PublicIpAddress, 0, len(result))
-	for _, el := range result {
-		if _, ok := existingSet[el.Id]; ok {
-			continue
-		}
-		existingSet[el.Id] = struct{}{}
-		uniqResult = append(uniqResult, el)
-	}
-	return uniqResult, nil
 }
