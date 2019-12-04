@@ -195,7 +195,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		address := r.FormValue("ipaddress")
 		id := r.FormValue("id")
 		page, _ := strconv.Atoi(r.FormValue("page"))
-		if page > 0 {
+		if page > 1 {
 			w.Write(MarshalResponse("listPublicIpAddressesResponse", cloudstack.ListPublicIpAddressesResponse{
 				Count: 0,
 			}))
@@ -437,7 +437,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "listLoadBalancerRuleInstances":
 		page, _ := strconv.Atoi(r.FormValue("page"))
-		if page > 0 {
+		if page > 1 {
 			w.Write(MarshalResponse("listLoadBalancerRuleInstancesResponse", cloudstack.ListLoadBalancerRuleInstancesResponse{
 				Count: 0,
 			}))
