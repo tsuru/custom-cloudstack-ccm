@@ -1,8 +1,70 @@
 package cloudstack
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/dgraph-io/ristretto"
 	"github.com/xanzy/go-cloudstack/cloudstack"
 )
+
+func vmCacheKey(name, projectID string) string {
+	return strings.Join([]string{name, projectID}, "\x00")
+}
+
+var ErrVMNotFound = errors.New("vm not found in cloudstack")
+
+type cloudstackManager struct {
+	client *cloudstack.CloudStackClient
+	cache  *ristretto.Cache
+}
+
+func newCloudstackManager(client *cloudstack.CloudStackClient) (*cloudstackManager, error) {
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 100000,   // Expected maximum items set to 10000, this value is 10x this number, as recommend by the docs.
+		MaxCost:     50 << 20, // Maximum cost of cache (50 MB).
+		BufferItems: 64,       // The magic value of 64 is the one recommended by the docs initially.
+		Cost: func(value interface{}) int64 {
+			// Approximate in memory size by converting to json
+			data, _ := json.Marshal(value)
+			return int64(len(data))
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &cloudstackManager{
+		cache:  cache,
+		client: client,
+	}, nil
+}
+
+func (m *cloudstackManager) virtualMachineByName(name, projectID string) (*cloudstack.VirtualMachine, error) {
+	key := vmCacheKey(name, projectID)
+	if vm, found := m.cache.Get(key); found {
+		return vm.(*cloudstack.VirtualMachine), nil
+	}
+	p := m.client.VirtualMachine.NewListVirtualMachinesParams()
+	p.SetName(name)
+	if projectID != "" {
+		p.SetProjectid(projectID)
+	}
+	vmsResponse, err := m.client.VirtualMachine.ListVirtualMachines(p)
+	if err != nil {
+		return nil, err
+	}
+	if len(vmsResponse.VirtualMachines) == 0 {
+		return nil, ErrVMNotFound
+	}
+	if len(vmsResponse.VirtualMachines) > 1 {
+		return nil, fmt.Errorf("more than one machine found with name %q in project %q", name, projectID)
+	}
+	vm := vmsResponse.VirtualMachines[0]
+	m.cache.Set(key, vm, 0)
+	return vm, nil
+}
 
 type pageParams interface {
 	SetPagesize(int)

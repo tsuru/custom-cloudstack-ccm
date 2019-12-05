@@ -97,6 +97,7 @@ func (c *commandArgsConfig) ToMap() map[string]string {
 
 type CSEnvironment struct {
 	client          *cloudstack.CloudStackClient
+	manager         *cloudstackManager
 	lbEnvironmentID string
 	lbDomain        string
 	// Indicates if LBs should be deleted upon service removal
@@ -184,10 +185,15 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 			}),
 		}
 		csCli := cloudstack.NewAsyncClient(v.APIURL, v.APIKey, v.SecretKey, !v.SSLNoVerify, opts...)
+		manager, err := newCloudstackManager(csCli)
+		if err != nil {
+			return nil, err
+		}
 		cs.environments[k] = CSEnvironment{
 			lbEnvironmentID: v.LBEnvironmentID,
 			lbDomain:        v.LBDomain,
 			client:          csCli,
+			manager:         manager,
 			removeLBs:       v.RemoveLBs,
 		}
 	}
