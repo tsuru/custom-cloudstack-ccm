@@ -477,12 +477,12 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %#v", nodes[0])
 	}
 
-	var client *cloudstack.CloudStackClient
+	var manager *cloudstackManager
 	if env, ok := cs.environments[environmentID]; ok {
-		client = env.client
+		manager = env.manager
 	}
-	if client == nil {
-		return nil, nil, "", fmt.Errorf("unable to retrieve cloudstack client for environment %q", environmentID)
+	if manager == nil {
+		return nil, nil, "", fmt.Errorf("unable to retrieve cloudstack manager for environment %q", environmentID)
 	}
 
 	var hostIDs []string
@@ -495,18 +495,12 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 			hostName = name
 		}
 
-		p := client.VirtualMachine.NewListVirtualMachinesParams()
-		p.SetName(hostName)
-		if projectID != "" {
-			p.SetProjectid(projectID)
-		}
-		vmsResponse, err := client.VirtualMachine.ListVirtualMachines(p)
-		if err != nil {
+		vm, err := manager.virtualMachineByName(hostName, projectID)
+		if err != nil && err != ErrVMNotFound {
 			return nil, nil, "", err
 		}
 
-		if len(vmsResponse.VirtualMachines) == 1 {
-			vm := vmsResponse.VirtualMachines[0]
+		if vm != nil {
 			hostIDs = append(hostIDs, vm.Id)
 			if _, ok := networkMap[vm.Nic[0].Networkid]; ok {
 				continue
