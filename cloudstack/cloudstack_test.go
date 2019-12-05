@@ -21,6 +21,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	cloudstackFake "github.com/tsuru/custom-cloudstack-ccm/cloudstack/fake"
 )
 
 func TestReadConfig(t *testing.T) {
@@ -209,4 +213,28 @@ func TestReadConfigFallbackSecretsToEnvs(t *testing.T) {
 	if cfg.Command.AssignNetworks != "assignNetworks" {
 		t.Errorf("incorrect assign-networks: %s", cfg.Command.AssignNetworks)
 	}
+}
+
+func Test_newCSCloud(t *testing.T) {
+	srv := cloudstackFake.NewCloudstackServer()
+	defer srv.Close()
+	csCloud, err := newCSCloud(&CSConfig{
+		Global: globalConfig{
+			EnvironmentLabel: "environment-label",
+			ProjectIDLabel:   "project-label",
+		},
+		Environment: map[string]*environmentConfig{
+			"env1": {
+				APIURL:          srv.URL,
+				APIKey:          "a",
+				SecretKey:       "b",
+				LBEnvironmentID: "1",
+				LBDomain:        "test.com",
+			},
+		},
+	})
+	require.Nil(t, err)
+	assert.Contains(t, csCloud.environments, "env1")
+	assert.NotNil(t, csCloud.environments["env1"].manager)
+	assert.NotNil(t, csCloud.environments["env1"].client)
 }

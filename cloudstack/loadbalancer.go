@@ -502,15 +502,31 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 
 		if vm != nil {
 			hostIDs = append(hostIDs, vm.Id)
-			if _, ok := networkMap[vm.Nic[0].Networkid]; ok {
+			nic, err := cs.externalNIC(vm)
+			if err != nil {
+				return nil, nil, "", err
+			}
+			if _, ok := networkMap[nic.Networkid]; ok {
 				continue
 			}
-			networkMap[vm.Nic[0].Networkid] = struct{}{}
-			networkIDs = append(networkIDs, vm.Nic[0].Networkid)
+			networkMap[nic.Networkid] = struct{}{}
+			networkIDs = append(networkIDs, nic.Networkid)
 		}
 	}
 
 	return hostIDs, networkIDs, projectID, nil
+}
+
+func (cs *CSCloud) externalNIC(instance *cloudstack.VirtualMachine) (*cloudstack.Nic, error) {
+	if len(instance.Nic) == 0 {
+		return nil, errors.New("instance does not have any nics")
+	}
+
+	externalIndex := cs.config.Global.ExternalIPIndex
+	if externalIndex >= 0 && externalIndex < len(instance.Nic) {
+		return &instance.Nic[externalIndex], nil
+	}
+	return &instance.Nic[0], nil
 }
 
 func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Service) []*v1.Node {
