@@ -94,7 +94,17 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 	} else {
 		names := lookupAddrWithTimeout(internalAddr)
 		for _, name := range names {
-			addresses = append(addresses, v1.NodeAddress{Type: v1.NodeHostName, Address: name})
+			// There's a chance for a PTR record to exist even when the A
+			// record does not exist or is invalid. This resolves the name
+			// returned in the PTR record to check if it reeeeaaallllly matches
+			// the internal IP.
+			ips := lookupHostWithTimeout(name)
+			for _, ip := range ips {
+				if ip == internalAddr {
+					addresses = append(addresses, v1.NodeAddress{Type: v1.NodeHostName, Address: name})
+					break
+				}
+			}
 		}
 	}
 
@@ -333,4 +343,11 @@ func lookupAddrWithTimeout(addr string) []string {
 	defer cancel()
 	names, _ := net.DefaultResolver.LookupAddr(ctx, addr)
 	return names
+}
+
+func lookupHostWithTimeout(host string) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	ips, _ := net.DefaultResolver.LookupHost(ctx, host)
+	return ips
 }
