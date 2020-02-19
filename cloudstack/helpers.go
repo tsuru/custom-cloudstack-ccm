@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/dgraph-io/ristretto"
-	"github.com/xanzy/go-cloudstack/cloudstack"
+	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 )
 
 func vmCacheKey(name, projectID string) string {

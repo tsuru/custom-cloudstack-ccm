@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	cloudstackFake "github.com/tsuru/custom-cloudstack-ccm/cloudstack/fake"
-	"github.com/xanzy/go-cloudstack/cloudstack"
+	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -377,9 +377,10 @@ github.com/vishvananda/netlink v0.0.0-20171020171820-b2de5d10e38e/go.mod h1:+SR5
 github.com/vishvananda/netns v0.0.0-20171111001504-be1fbeda1936/go.mod h1:ZjcWmFBXmLKZu9Nxj3WKYEafiSqer2rnvPr0en9UNpI=
 github.com/vmware/govmomi v0.20.1/go.mod h1:URlwyTFZX72RmxtxuaFL2Uj3fD1JTvZdx59bHWk6aFU=
 github.com/vmware/photon-controller-go-sdk v0.0.0-20170310013346-4a435daef6cc/go.mod h1:e6humHha1ekIwTCm+A5Qed5mG8V4JL+ChHcUOJ+L/8U=
+github.com/xanzy/go-cloudstack v0.0.0-20160728180336-1e2cbf647e57 h1:3OK6oXqbbEUeWvTJgg1pZgNjzdCNE6hMu2TragCfwb8=
 github.com/xanzy/go-cloudstack v0.0.0-20160728180336-1e2cbf647e57/go.mod h1:s3eL3z5pNXF5FVybcT+LIVdId8pYn709yv6v5mrkrQE=
-github.com/xanzy/go-cloudstack v1.2.1-0.20190607064702-47f3e6c8e562 h1:7OZu/0n28YVUTo+9LRru7Z0OA/VopRzefv5cBQgftTo=
-github.com/xanzy/go-cloudstack v1.2.1-0.20190607064702-47f3e6c8e562/go.mod h1:sBh287mCRwCz6zyXHMmw7sSZGPohVpnx+o+OY4M+i3A=
+github.com/xanzy/go-cloudstack/v2 v2.8.0 h1:fT6EK104RkcSpGrdlsrFZbCFob3vyXeXm60HUYtouU4=
+github.com/xanzy/go-cloudstack/v2 v2.8.0/go.mod h1:+SiI2stR3n/P6IKCjrlD2e2EWzk+rQqK4SxC4V9QhnY=
 github.com/xiang90/probing v0.0.0-20160813154853-07dd2e8dfe18/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 h1:eY9dn8+vbi4tKz5Qo6v2eYzo7kUS51QINcR5jNpbZS8=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=

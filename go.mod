@@ -40,7 +40,7 @@ require (
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.4.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
-	github.com/xanzy/go-cloudstack v1.2.1-0.20190607064702-47f3e6c8e562
+	github.com/xanzy/go-cloudstack/v2 v2.8.0
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.3 // indirect
 	golang.org/x/crypto v0.0.0-20190617133340-57b3e21c3d56 // indirect

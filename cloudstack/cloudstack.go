@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xanzy/go-cloudstack/cloudstack"
+	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	"gopkg.in/gcfg.v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/transport"
