@@ -379,8 +379,8 @@ github.com/vmware/govmomi v0.20.1/go.mod h1:URlwyTFZX72RmxtxuaFL2Uj3fD1JTvZdx59b
 github.com/vmware/photon-controller-go-sdk v0.0.0-20170310013346-4a435daef6cc/go.mod h1:e6humHha1ekIwTCm+A5Qed5mG8V4JL+ChHcUOJ+L/8U=
 github.com/xanzy/go-cloudstack v0.0.0-20160728180336-1e2cbf647e57 h1:3OK6oXqbbEUeWvTJgg1pZgNjzdCNE6hMu2TragCfwb8=
 github.com/xanzy/go-cloudstack v0.0.0-20160728180336-1e2cbf647e57/go.mod h1:s3eL3z5pNXF5FVybcT+LIVdId8pYn709yv6v5mrkrQE=
-github.com/xanzy/go-cloudstack/v2 v2.8.0 h1:fT6EK104RkcSpGrdlsrFZbCFob3vyXeXm60HUYtouU4=
-github.com/xanzy/go-cloudstack/v2 v2.8.0/go.mod h1:+SiI2stR3n/P6IKCjrlD2e2EWzk+rQqK4SxC4V9QhnY=
+github.com/xanzy/go-cloudstack/v2 v2.8.1-0.20200331213729-bc6cdc7c37e5 h1:p3db12oBLLOzULsCenBqAKWq2L50g2JfSokX52+bV0M=
+github.com/xanzy/go-cloudstack/v2 v2.8.1-0.20200331213729-bc6cdc7c37e5/go.mod h1:+SiI2stR3n/P6IKCjrlD2e2EWzk+rQqK4SxC4V9QhnY=
 github.com/xiang90/probing v0.0.0-20160813154853-07dd2e8dfe18/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 h1:eY9dn8+vbi4tKz5Qo6v2eYzo7kUS51QINcR5jNpbZS8=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
