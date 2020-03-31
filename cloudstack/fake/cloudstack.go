@@ -91,6 +91,10 @@ func (s *CloudstackServer) AddLBRule(lbName string, lbRule LoadBalancerRule) {
 	s.lbRules[lbName] = &lbRule
 }
 
+func (s *CloudstackServer) AddTags(resourceid string, tags []cloudstack.Tags) {
+	s.tags[resourceid] = tags
+}
+
 func (s *CloudstackServer) SetDefaultLBPoolCreation(lbId string) {
 	lbName := s.lbNameByID(lbId)
 	lbRule := s.lbRules[lbName]
@@ -380,6 +384,23 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Value: r.FormValue("tags[0].value"),
 			})
 			return obj
+		}
+
+	case "deleteTags":
+		jobID := s.newID(cmd)
+		response := cloudstack.DeleteTagsResponse{
+			JobID: fmt.Sprintf("job-delete-tags-%d", jobID),
+		}
+
+		w.Write(MarshalResponse("deleteTags", response))
+
+		s.Jobs[response.JobID] = func() interface{} {
+			ids := r.Form["resourceids"]
+			for _, id := range ids {
+				delete(s.tags, id)
+			}
+			response.Success = true
+			return response
 		}
 
 	case "assignToLoadBalancerRule":

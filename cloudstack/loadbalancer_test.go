@@ -1355,6 +1355,321 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 	}
 }
 
+func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
+	baseSvc := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc1",
+			Namespace: corev1.NamespaceDefault,
+			Annotations: map[string]string{
+				"project-label":     "project-1",
+				"environment-label": "env1",
+			},
+		},
+	}
+	tests := []struct {
+		name   string
+		svc    *corev1.Service
+		setup  func(*cloudstackFake.CloudstackServer)
+		assert func(*testing.T, error, *cloudstackFake.CloudstackServer)
+	}{
+		{
+			name: "service is not provided",
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.Error(t, err)
+				assert.EqualError(t, err, "service cannot be nil")
+			},
+		},
+		{
+			name: "lb rule not found",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["environment-label"] = "env2"
+				return svc
+			}(),
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.env2.test.com"}, "projectid": []string{"project-1"}, "listall": []string{"true"}}},
+					{Command: "listLoadBalancerRules", Params: url.Values{"tags[0].key": []string{"kubernetes_service"}, "tags[0].value": []string{"svc1"}, "projectid": []string{"project-1"}, "listall": []string{"true"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal config either on service labels or environment configs is not enabled",
+			svc:  baseSvc.DeepCopy(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddLBRule("svc1.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":         "1",
+						"name":       "svc1.test.com",
+						"publicipid": "1",
+						"publicip":   "192.168.1.100",
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal enabled on environment configs; lb rule without mandatory resource tags; should not manage",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["environment-label"] = "env2"
+				return svc
+			}(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddLBRule("svc1.env2.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":   "1",
+						"name": "svc1.env2.test.com",
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.env2.test.com"}, "projectid": []string{"project-1"}, "listall": []string{"true"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal is enabled on service labels; lb rules without mandatory resource tags; should not manage",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-remove"] = "true"
+				return svc
+			}(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddLBRule("svc1.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":         "1",
+						"name":       "svc1.test.com",
+						"publicipid": "1",
+						"publicip":   "192.168.1.100",
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal is enabled on environment configs but disabled on service labels",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["environment-label"] = "env2"
+				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-remove"] = "false"
+				return svc
+			}(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddLBRule("svc1.env2.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":         "1",
+						"name":       "svc1.env2.test.com",
+						"publicipid": "1",
+						"publicip":   "192.168.1.100",
+						"tags": map[string]string{
+							"cloudprovider":         "custom-cloudstack",
+							"kubernetes_namespaces": "default",
+							"kubernetes_service":    "svc1",
+						},
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.env2.test.com"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal enabled on service labels and lb managed by this controller (custom-cloudstack)",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-remove"] = "true"
+				return svc
+			}(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddTags("1", []cloudstack.Tags{
+					{Key: "cloudprovider", Value: "custom-cloudstack"},
+					{Key: "kubernetes_namespace", Value: "default"},
+					{Key: "kubernetes_service", Value: "svc1"},
+				})
+				cs.AddIP(cloudstack.PublicIpAddress{
+					Id:        "1",
+					Ipaddress: "192.168.1.100",
+					Tags: []cloudstack.Tags{
+						{Key: "cloudprovider", Value: "custom-cloudstack"},
+						{Key: "kubernetes_namespace", Value: "default"},
+						{Key: "kubernetes_service", Value: "svc1"},
+					},
+				})
+				cs.AddLBRule("svc1.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":         "1",
+						"name":       "svc1.test.com",
+						"publicipid": "1",
+						"publicip":   "192.168.1.100",
+						"tags": map[string]string{
+							"cloudprovider":         "custom-cloudstack",
+							"kubernetes_namespaces": "default",
+							"kubernetes_service":    "svc1",
+						},
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+					{Command: "deleteTags", Params: url.Values{"resourceids": []string{"1"}, "resourcetype": []string{"LoadBalancer"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}, "tags[1].key": []string{"kubernetes_namespace"}, "tags[1].value": []string{"default"}, "tags[2].key": []string{"kubernetes_service"}, "tags[2].value": []string{"svc1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-delete-tags-1"}}},
+					{Command: "deleteLoadBalancerRule", Params: url.Values{"id": []string{"1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-delete-lb-1"}}},
+					{Command: "listPublicIpAddresses", Params: url.Values{"id": []string{"1"}, "projectid": []string{"project-1"}, "listall": []string{"true"}}},
+					{Command: "disassociateIpAddress", Params: url.Values{"id": []string{"1"}, "projectid": []string{"project-1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-ip-disassociate-1"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal is enabled on environment config and it's managed by this controller",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["environment-label"] = "env2"
+				return svc
+			}(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddTags("1", []cloudstack.Tags{
+					{Key: "cloudprovider", Value: "custom-cloudstack"},
+					{Key: "kubernetes_namespace", Value: "default"},
+					{Key: "kubernetes_service", Value: "svc1"},
+				})
+				cs.AddIP(cloudstack.PublicIpAddress{
+					Id:        "1",
+					Ipaddress: "192.168.1.100",
+					Tags: []cloudstack.Tags{
+						{Key: "cloudprovider", Value: "custom-cloudstack"},
+						{Key: "kubernetes_namespace", Value: "default"},
+						{Key: "kubernetes_service", Value: "svc1"},
+					},
+				})
+				cs.AddLBRule("svc1.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":         "1",
+						"name":       "svc1.env2.test.com",
+						"publicipid": "1",
+						"publicip":   "192.168.1.100",
+						"tags": map[string]string{
+							"cloudprovider":         "custom-cloudstack",
+							"kubernetes_namespaces": "default",
+							"kubernetes_service":    "svc1",
+						},
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.env2.test.com"}}},
+					{Command: "deleteTags", Params: url.Values{"resourceids": []string{"1"}, "resourcetype": []string{"LoadBalancer"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}, "tags[1].key": []string{"kubernetes_namespace"}, "tags[1].value": []string{"default"}, "tags[2].key": []string{"kubernetes_service"}, "tags[2].value": []string{"svc1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-delete-tags-1"}}},
+					{Command: "deleteLoadBalancerRule", Params: url.Values{"id": []string{"1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-delete-lb-1"}}},
+					{Command: "listPublicIpAddresses", Params: url.Values{"id": []string{"1"}, "projectid": []string{"project-1"}, "listall": []string{"true"}}},
+					{Command: "disassociateIpAddress", Params: url.Values{"id": []string{"1"}, "projectid": []string{"project-1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-ip-disassociate-1"}}},
+				})
+			},
+		},
+		{
+			name: "lb removal is enabled; lb managed by this controller; no public ip attached to lb rule",
+			svc: func() *corev1.Service {
+				svc := baseSvc.DeepCopy()
+				svc.Annotations["environment-label"] = "env2"
+				return svc
+			}(),
+			setup: func(cs *cloudstackFake.CloudstackServer) {
+				cs.AddTags("1", []cloudstack.Tags{
+					{Key: "cloudprovider", Value: "custom-cloudstack"},
+					{Key: "kubernetes_namespace", Value: "default"},
+					{Key: "kubernetes_service", Value: "svc1"},
+				})
+				cs.AddLBRule("svc1.test.com", cloudstackFake.LoadBalancerRule{
+					Rule: map[string]interface{}{
+						"id":   "1",
+						"name": "svc1.env2.test.com",
+						"tags": map[string]string{
+							"cloudprovider":         "custom-cloudstack",
+							"kubernetes_namespaces": "default",
+							"kubernetes_service":    "svc1",
+						},
+					},
+				})
+			},
+			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
+				require.NoError(t, err)
+				cs.HasCalls(t, []cloudstackFake.MockAPICall{
+					{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.env2.test.com"}}},
+					{Command: "deleteTags", Params: url.Values{"resourceids": []string{"1"}, "resourcetype": []string{"LoadBalancer"}, "tags[0].key": []string{"cloudprovider"}, "tags[0].value": []string{"custom-cloudstack"}, "tags[1].key": []string{"kubernetes_namespace"}, "tags[1].value": []string{"default"}, "tags[2].key": []string{"kubernetes_service"}, "tags[2].value": []string{"svc1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-delete-tags-1"}}},
+					{Command: "deleteLoadBalancerRule", Params: url.Values{"id": []string{"1"}}},
+					{Command: "queryAsyncJobResult", Params: url.Values{"jobid": []string{"job-delete-lb-1"}}},
+				})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NotNil(t, tt.assert)
+			srv := cloudstackFake.NewCloudstackServer()
+			defer srv.Close()
+			if tt.setup != nil {
+				tt.setup(srv)
+			}
+			csCloud, err := newCSCloud(&CSConfig{
+				Global: globalConfig{
+					EnvironmentLabel: "environment-label",
+					ProjectIDLabel:   "project-label",
+				},
+				Environment: map[string]*environmentConfig{
+					"env1": {
+						APIURL:          srv.URL,
+						APIKey:          "a",
+						SecretKey:       "b",
+						LBEnvironmentID: "1",
+						LBDomain:        "test.com",
+					},
+					"env2": {
+						APIURL:          srv.URL,
+						APIKey:          "a",
+						SecretKey:       "b",
+						LBEnvironmentID: "2",
+						LBDomain:        "env2.test.com",
+						RemoveLBs:       true,
+					},
+				},
+			})
+			require.Nil(t, err)
+			err = csCloud.EnsureLoadBalancerDeleted(context.Background(), "cluster1", tt.svc)
+			tt.assert(t, err, srv)
+		})
+	}
+}
+
 func TestFilterNodesMatchingLabels(t *testing.T) {
 	nodes := []*v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool1"}}},
