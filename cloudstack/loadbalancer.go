@@ -44,7 +44,7 @@ const (
 	lbCustomHealthCheckMessagePrefix   = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-"
 	lbCustomHealthCheckResponsePrefix  = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-"
 
-	removeLBsOnRemoveLabelKey = "csccm.cloudprovider.io/remove-loadbalancers-on-remove"
+	removeLBsOnDeleteLabelKey = "csccm.cloudprovider.io/remove-loadbalancers-on-delete"
 
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
@@ -325,7 +325,7 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 func isLBRemovalEnabled(lb *loadBalancer, service *v1.Service) bool {
 	klog.V(5).Infof("isLBRemovalEnabled(%v, %v, %v)", lb.ip, service.Namespace, service.Name)
 
-	if removeLBFlag, ok := getLabelOrAnnotation(service.ObjectMeta, removeLBsOnRemoveLabelKey); ok {
+	if removeLBFlag, ok := getLabelOrAnnotation(service.ObjectMeta, removeLBsOnDeleteLabelKey); ok {
 		klog.V(5).Infof("LB removal flag %q has been found on %q Service labels/annotations", removeLBFlag, service)
 		if b, err := strconv.ParseBool(removeLBFlag); err == nil {
 			return b

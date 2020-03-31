@@ -1444,7 +1444,7 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 			name: "lb removal is enabled on service labels; lb rules without mandatory resource tags; should not manage",
 			svc: func() *corev1.Service {
 				svc := baseSvc.DeepCopy()
-				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-remove"] = "true"
+				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-delete"] = "true"
 				return svc
 			}(),
 			setup: func(cs *cloudstackFake.CloudstackServer) {
@@ -1469,7 +1469,7 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 			svc: func() *corev1.Service {
 				svc := baseSvc.DeepCopy()
 				svc.Annotations["environment-label"] = "env2"
-				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-remove"] = "false"
+				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-delete"] = "false"
 				return svc
 			}(),
 			setup: func(cs *cloudstackFake.CloudstackServer) {
@@ -1498,7 +1498,7 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 			name: "lb removal enabled on service labels and lb managed by this controller (custom-cloudstack)",
 			svc: func() *corev1.Service {
 				svc := baseSvc.DeepCopy()
-				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-remove"] = "true"
+				svc.Annotations["csccm.cloudprovider.io/remove-loadbalancers-on-delete"] = "true"
 				return svc
 			}(),
 			setup: func(cs *cloudstackFake.CloudstackServer) {
