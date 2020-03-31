@@ -290,13 +290,13 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 		return nil
 	}
 
-	if !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb.ip)
+	if lb.rule == nil {
+		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted; LoadBalancerRule not found for service %s/%s", service.Namespace, service.Name)
 		return nil
 	}
 
-	if lb.rule == nil {
-		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted; LBRule not found for service %s/%s and LB %q", service.Namespace, service.Name, lb.ip)
+	if !shouldManageLB(lb, service) {
+		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb.ip)
 		return nil
 	}
 
