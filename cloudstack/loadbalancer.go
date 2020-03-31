@@ -44,6 +44,8 @@ const (
 	lbCustomHealthCheckMessagePrefix   = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-"
 	lbCustomHealthCheckResponsePrefix  = "csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-"
 
+	removeLBsOnRemoveLabelKey = "csccm.cloudprovider.io/remove-loadbalancers-on-remove"
+
 	cloudProviderTag = "cloudprovider"
 	serviceTag       = "kubernetes_service"
 	namespaceTag     = "kubernetes_namespace"
@@ -164,16 +166,9 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 
 	klog.V(4).Infof("Ensuring Load Balancer: %#v", lb)
 
-	if lb.rule != nil {
-		var manage bool
-		manage, err = shouldManageLB(lb, service)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check if LB should be managed: %v", err)
-		}
-		if !manage {
-			klog.V(3).Infof("Skipping EnsureLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb.ip)
-			return nil, fmt.Errorf("LB %s not managed by cloudprovider", lb.ip)
-		}
+	if lb.rule != nil && !shouldManageLB(lb, service) {
+		klog.V(3).Infof("Skipping EnsureLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb.ip)
+		return nil, fmt.Errorf("LB %s not managed by cloudprovider", lb.ip)
 	}
 
 	err = lb.loadLoadBalancerIP(service)
@@ -265,11 +260,7 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 		return nil
 	}
 
-	manage, err := shouldManageLB(lb, service)
-	if err != nil {
-		return fmt.Errorf("failed to check if LB should be managed: %v", err)
-	}
-	if !manage {
+	if !shouldManageLB(lb, service) {
 		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb.ip)
 		return nil
 	}
@@ -280,6 +271,10 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 // EnsureLoadBalancerDeleted deletes the specified load balancer if it exists, returning
 // nil if the load balancer specified either didn't exist or was successfully deleted.
 func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName string, service *v1.Service) error {
+	if service == nil {
+		return fmt.Errorf("service cannot be nil")
+	}
+
 	klog.V(5).Infof("EnsureLoadBalancerDeleted(%v, %v, %v)", clusterName, service.Namespace, service.Name)
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
@@ -290,17 +285,18 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 		return err
 	}
 
-	if !lb.cloud.environments[lb.cloud.environment].removeLBs {
-		klog.V(3).Infof("skipping deletion of load balancer %s: environment has removals disabled.", lb.ip)
+	if !isLBRemovalEnabled(lb, service) {
+		klog.V(3).Infof("skipping deletion of load balancer %s: service or environment has removals disabled.", lb.ip)
 		return nil
 	}
 
-	manage, err := shouldManageLB(lb, service)
-	if err != nil {
-		return fmt.Errorf("failed to check if LB should be managed: %v", err)
+	if !shouldManageLB(lb, service) {
+		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb.ip)
+		return nil
 	}
-	if !manage {
-		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %s", service.Namespace, service.Name, lb.ip)
+
+	if lb.rule == nil {
+		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted; LBRule not found for service %s/%s and LB %q", service.Namespace, service.Name, lb.ip)
 		return nil
 	}
 
@@ -309,13 +305,12 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 		return err
 	}
 
-	if lb.rule != nil {
-		if err := lb.deleteLoadBalancerRule(); err != nil {
-			return err
-		}
+	klog.V(4).Infof("Deleting load balancer rule: %v", lb.ip)
+	if err := lb.deleteLoadBalancerRule(); err != nil {
+		return err
 	}
 
-	if lb.ip.id != "" && lb.ip.address != service.Spec.LoadBalancerIP {
+	if lb.ip.id != "" {
 		klog.V(4).Infof("Releasing load balancer IP: %v", lb.ip)
 		if err := lb.cloud.releaseIPIfManaged(lb.ip, service); err != nil {
 			return err
@@ -323,6 +318,22 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 	}
 
 	return nil
+}
+
+// isLBRemovalEnabled indicates whether the configurations for load balancer
+// removal is enabled.
+func isLBRemovalEnabled(lb *loadBalancer, service *v1.Service) bool {
+	klog.V(5).Infof("isLBRemovalEnabled(%v, %v, %v)", lb.ip, service.Namespace, service.Name)
+
+	if removeLBFlag, ok := getLabelOrAnnotation(service.ObjectMeta, removeLBsOnRemoveLabelKey); ok {
+		klog.V(5).Infof("LB removal flag %q has been found on %q Service labels/annotations", removeLBFlag, service)
+		if b, err := strconv.ParseBool(removeLBFlag); err == nil {
+			return b
+		}
+	}
+
+	klog.V(5).Infof("checking whether the LB removal is enabled for the %q environment", lb.cloud.environment)
+	return lb.cloud.environments[lb.cloud.environment].removeLBs
 }
 
 // getLoadBalancer retrieves the IP address and ID and all the existing rules it can find.
@@ -1208,9 +1219,9 @@ func shouldManageIP(ip cloudstack.PublicIpAddress, service *v1.Service) bool {
 }
 
 // shouldManageLB checks if LB has the provider tag and the corresponding service tags
-func shouldManageLB(lb *loadBalancer, service *v1.Service) (bool, error) {
+func shouldManageLB(lb *loadBalancer, service *v1.Service) bool {
 	if lb.rule == nil {
-		return true, nil
+		return true
 	}
 	wantedTags := tagsForService(service)
 	optionalTags := map[string]struct{}{namespaceTag: {}}
@@ -1221,10 +1232,10 @@ func shouldManageLB(lb *loadBalancer, service *v1.Service) (bool, error) {
 		}
 		if !isTagSet || wantedValue != value {
 			klog.V(3).Infof("should NOT manage LB %s. Expected value for tag %q: %q, got: %q.", lb.name, tagKey, wantedValue, value)
-			return false, nil
+			return false
 		}
 	}
-	return true, nil
+	return true
 }
 
 func (lb *loadBalancer) hasMissingTags() (bool, error) {
