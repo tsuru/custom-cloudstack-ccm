@@ -99,6 +99,20 @@ type UpdateGloboNetworkPoolResponse struct {
 	Jobstatus int    `json:"jobstatus"`
 }
 
+func (lb *loadBalancer) String() string {
+	if lb == nil {
+		return "lb(nil)"
+	}
+	return fmt.Sprintf("lb(%v, %v %v)", lb.name, lb.rule, lb.ip)
+}
+
+func (lb *loadBalancerRule) String() string {
+	if lb == nil || lb.LoadBalancerRule == nil {
+		return "lbrule(nil)"
+	}
+	return fmt.Sprintf("lbrule(%v, %v)", lb.LoadBalancerRule.Id, lb.LoadBalancerRule.Name)
+}
+
 func (ip cloudstackIP) String() string {
 	return fmt.Sprintf("ip(%v, %v)", ip.id, ip.address)
 }
@@ -124,7 +138,7 @@ func (cs *CSCloud) GetLoadBalancer(ctx context.Context, clusterName string, serv
 		return nil, false, nil
 	}
 
-	klog.V(4).Infof("Found a load balancer associated with IP %v", lb.ip)
+	klog.V(4).Infof("Found a load balancer %v", lb)
 
 	status := &v1.LoadBalancerStatus{}
 	status.Ingress = append(status.Ingress, v1.LoadBalancerIngress{IP: lb.ip.address})
@@ -164,11 +178,11 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 
 	lb.setAlgorithm(service)
 
-	klog.V(4).Infof("Ensuring Load Balancer: %#v", lb)
+	klog.V(4).Infof("Ensuring Load Balancer: %v", lb)
 
 	if lb.rule != nil && !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping EnsureLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb.ip)
-		return nil, fmt.Errorf("LB %s not managed by cloudprovider", lb.ip)
+		klog.V(3).Infof("Skipping EnsureLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb)
+		return nil, fmt.Errorf("LB %s not managed by cloudprovider", lb)
 	}
 
 	err = lb.loadLoadBalancerIP(service)
@@ -261,7 +275,7 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 	}
 
 	if !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb.ip)
+		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb)
 		return nil
 	}
 
@@ -285,33 +299,33 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 		return err
 	}
 
-	if !isLBRemovalEnabled(lb, service) {
-		klog.V(3).Infof("skipping deletion of load balancer %s: service or environment has removals disabled.", lb.ip)
-		return nil
-	}
-
 	if lb.rule == nil {
 		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted; LoadBalancerRule not found for service %s/%s", service.Namespace, service.Name)
 		return nil
 	}
 
-	if !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb.ip)
+	if !isLBRemovalEnabled(lb, service) {
+		klog.V(3).Infof("Skipping deletion of load balancer %s: service or environment has removals disabled.", lb)
 		return nil
 	}
 
-	klog.V(4).Infof("Deleting load balancer provider tag: %v", lb.ip)
+	if !shouldManageLB(lb, service) {
+		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb)
+		return nil
+	}
+
+	klog.V(4).Infof("Deleting load balancer provider tag: %v", lb)
 	if err := lb.deleteTags(service); err != nil {
 		return err
 	}
 
-	klog.V(4).Infof("Deleting load balancer rule: %v", lb.ip)
+	klog.V(4).Infof("Deleting load balancer rule: %v", lb)
 	if err := lb.deleteLoadBalancerRule(); err != nil {
 		return err
 	}
 
 	if lb.ip.id != "" {
-		klog.V(4).Infof("Releasing load balancer IP: %v", lb.ip)
+		klog.V(4).Infof("Releasing load balancer IP: %v", lb)
 		if err := lb.cloud.releaseIPIfManaged(lb.ip, service); err != nil {
 			return err
 		}
@@ -323,7 +337,7 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 // isLBRemovalEnabled indicates whether the configurations for load balancer
 // removal is enabled.
 func isLBRemovalEnabled(lb *loadBalancer, service *v1.Service) bool {
-	klog.V(5).Infof("isLBRemovalEnabled(%v, %v, %v)", lb.ip, service.Namespace, service.Name)
+	klog.V(5).Infof("isLBRemovalEnabled(%v, %v, %v)", lb, service.Namespace, service.Name)
 
 	if removeLBFlag, ok := getLabelOrAnnotation(service.ObjectMeta, removeLBsOnDeleteLabelKey); ok {
 		klog.V(5).Infof("LB removal flag %q has been found on %q Service labels/annotations", removeLBFlag, service)
@@ -950,12 +964,12 @@ func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, service *v1.Ser
 		}
 		needsUpdate := lb.rule.Algorithm != lb.algorithm || missingTags
 		if needsUpdate {
-			klog.V(4).Infof("checkLoadBalancerRule found differences, needsUpdate true for LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
+			klog.V(4).Infof("checkLoadBalancerRule found differences, needsUpdate true for LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
 		}
 		return true, needsUpdate, nil
 	}
 
-	klog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb.rule.Name, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
+	klog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
 
 	// Delete the load balancer rule so we can create a new one using the new values.
 	if err := lb.deleteLoadBalancerRule(); err != nil {
@@ -1171,7 +1185,7 @@ func (lb *loadBalancer) generateGloboNetworkPool(portsIdx int, service *v1.Servi
 
 // deleteLoadBalancerRule deletes a load balancer rule.
 func (lb *loadBalancer) deleteLoadBalancerRule() error {
-	klog.V(4).Infof("Deleting load balancer rule: %v", lb.rule.Id)
+	klog.V(4).Infof("Deleting load balancer rule: %v", lb)
 	client, err := lb.getClient()
 	if err != nil {
 		return err
@@ -1191,7 +1205,7 @@ func (lb *loadBalancer) deleteLoadBalancerRule() error {
 	var result cloudstack.DeleteLoadBalancerRuleResponse
 	err = client.Custom.CustomRequest(deleteLBCommand, p, &result)
 	if err != nil {
-		return fmt.Errorf("error deleting load balancer rule %v: %v", lb.rule.Id, err)
+		return fmt.Errorf("error deleting load balancer rule %v: %v", lb, err)
 	}
 
 	if result.JobID != "" {
@@ -1231,7 +1245,7 @@ func shouldManageLB(lb *loadBalancer, service *v1.Service) bool {
 			continue
 		}
 		if !isTagSet || wantedValue != value {
-			klog.V(3).Infof("should NOT manage LB %s. Expected value for tag %q: %q, got: %q.", lb.name, tagKey, wantedValue, value)
+			klog.V(3).Infof("should NOT manage LB %s. Expected value for tag %q: %q, got: %q.", lb, tagKey, wantedValue, value)
 			return false
 		}
 	}
