@@ -29,6 +29,7 @@ import (
 	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 )
@@ -99,6 +100,14 @@ type UpdateGloboNetworkPoolResponse struct {
 	Jobstatus int    `json:"jobstatus"`
 }
 
+type IPNotFoundError struct {
+	ip string
+}
+
+func (e IPNotFoundError) Error() string {
+	return fmt.Sprintf("could not find IP address %v", e.ip)
+}
+
 func (lb *loadBalancer) String() string {
 	if lb == nil {
 		return "lb(nil)"
@@ -141,14 +150,17 @@ func (cs *CSCloud) GetLoadBalancer(ctx context.Context, clusterName string, serv
 	klog.V(4).Infof("Found a load balancer %v", lb)
 
 	status := &v1.LoadBalancerStatus{}
-	status.Ingress = append(status.Ingress, v1.LoadBalancerIngress{IP: lb.ip.address})
+	status.Ingress = append(status.Ingress, v1.LoadBalancerIngress{
+		IP:       lb.ip.address,
+		Hostname: lb.name,
+	})
 
 	return status, true, nil
 }
 
 // EnsureLoadBalancer creates a new load balancer, or updates the existing one. Returns the status of the balancer.
-func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (status *v1.LoadBalancerStatus, err error) {
-	klog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, service.Spec.Ports, nodes)
+func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
+	klog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, ports: %d, nodes: %d)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, len(service.Spec.Ports), len(nodes))
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
 
@@ -156,18 +168,11 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, fmt.Errorf("requested load balancer with no ports")
 	}
 
-	nodes = cs.filterNodesMatchingLabels(nodes, *service)
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes available to add to load balancer")
-	}
+	nodes = cs.filterNodesMatchingLabels(nodes, service)
 
 	hostIDs, networkIDs, projectID, err := cs.extractIDs(nodes)
 	if err != nil {
 		return nil, err
-	}
-	if len(hostIDs) == 0 || len(networkIDs) == 0 {
-		return nil, fmt.Errorf("unable to map kubernetes nodes to cloudstack instances and networks for service (%v, %v)", service.Namespace, service.Name)
 	}
 
 	// Get the load balancer details and existing rules.
@@ -176,7 +181,23 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, err
 	}
 
-	lb.setAlgorithm(service)
+	if lb.cloud.projectID != "" && service.Labels[cs.config.Global.ProjectIDLabel] == "" {
+		service.Labels[cs.config.Global.ProjectIDLabel] = lb.cloud.projectID
+
+		_, err = cs.kubeClient.CoreV1().Services(service.Namespace).Patch(
+			service.Name,
+			types.JSONPatchType,
+			createJSONPatchForLabel(cs.config.Global.ProjectIDLabel, lb.cloud.projectID),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to patch service with project-id label: %v", err)
+		}
+	}
+
+	err = lb.setAlgorithm(service)
+	if err != nil {
+		return nil, err
+	}
 
 	klog.V(4).Infof("Ensuring Load Balancer: %v", lb)
 
@@ -197,47 +218,45 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		}
 	}
 
-	klog.V(4).Infof("Load balancer %v is associated with IP %v", lb.name, lb.ip)
-
-	status = &v1.LoadBalancerStatus{}
-	status.Ingress = []v1.LoadBalancerIngress{{IP: lb.ip.address, Hostname: lb.name}}
-
-	if lb.cloud.projectID != "" && service.Labels[cs.config.Global.ProjectIDLabel] == "" {
-		service.Labels[cs.config.Global.ProjectIDLabel] = lb.cloud.projectID
-	}
+	klog.V(4).Infof("Load balancer %v is associated with IP %v", lb, lb.ip)
 
 	// If the load balancer rule exists and is up-to-date, we move on to the next rule.
-	exists, needsUpdate, err := lb.checkLoadBalancerRule(lb.name, service)
+	result, err := lb.checkLoadBalancerRule(lb.name, service)
 	if err != nil {
 		return nil, err
 	}
 
-	if needsUpdate {
+	if result.needsUpdate {
 		klog.V(4).Infof("Updating load balancer rule: %v", lb.name)
 		if err = lb.updateLoadBalancerRule(service); err != nil {
 			return nil, err
 		}
 	}
 
-	if exists {
-		if err = lb.syncNodes(hostIDs, networkIDs); err != nil {
+	if result.needsTags {
+		if err = lb.cloud.assignTagsToRule(lb.rule, service); err != nil {
 			return nil, err
 		}
-		if err = lb.updateLoadBalancerPool(lb.rule, service); err != nil {
+	}
+
+	status := &v1.LoadBalancerStatus{
+		Ingress: []v1.LoadBalancerIngress{{
+			IP:       lb.ip.address,
+			Hostname: lb.name,
+		}},
+	}
+
+	if !result.exists {
+		klog.V(4).Infof("Creating load balancer rule: %v", lb)
+		lb.rule, err = lb.createLoadBalancerRule(lb.name, service)
+		if err != nil {
 			return nil, err
 		}
-		return status, nil
-	}
 
-	klog.V(4).Infof("Creating load balancer rule: %v", lb.name)
-	lb.rule, err = lb.createLoadBalancerRule(lb.name, service)
-	if err != nil {
-		return nil, err
-	}
-
-	klog.V(4).Infof("Assigning tag to load balancer rule: %v", lb.name)
-	if err = lb.cloud.assignTagsToRule(lb.rule, service); err != nil {
-		return nil, err
+		klog.V(4).Infof("Assigning tag to load balancer rule: %v", lb)
+		if err = lb.cloud.assignTagsToRule(lb.rule, service); err != nil {
+			return nil, err
+		}
 	}
 
 	if err = lb.syncNodes(hostIDs, networkIDs); err != nil {
@@ -257,7 +276,7 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
 
-	nodes = cs.filterNodesMatchingLabels(nodes, *service)
+	nodes = cs.filterNodesMatchingLabels(nodes, service)
 
 	hostIDs, networkIDs, projectID, err := cs.extractIDs(nodes)
 	if err != nil {
@@ -312,11 +331,6 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 	if !shouldManageLB(lb, service) {
 		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb)
 		return nil
-	}
-
-	klog.V(4).Infof("Deleting load balancer provider tag: %v", lb)
-	if err := lb.deleteTags(service); err != nil {
-		return err
 	}
 
 	klog.V(4).Infof("Deleting load balancer rule: %v", lb)
@@ -374,8 +388,7 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networ
 
 	client, err := lb.getClient()
 	if err != nil {
-		klog.V(4).Infof("unable to retrieve cloudstack client for load balancer %q for service %v/%v: %v", lb.name, service.Namespace, service.Name, err)
-		return lb, nil
+		return nil, err
 	}
 
 	lb.rule, err = getLoadBalancerRule(client, service, lb.name, projectID)
@@ -454,7 +467,8 @@ func getLoadBalancerByTags(client *cloudstack.CloudStackClient, service *v1.Serv
 	}
 	tags := tagsForService(service)
 	// Use only service name in query, as we'll filter the result by all tags a
-	// few lines down.
+	// few lines down. Setting more tags would actually be worse than setting a
+	// single one because cloudstack will OR the tags instead of AND.
 	pc.SetParam("tags[0].key", serviceTag)
 	pc.SetParam("tags[0].value", tags[serviceTag])
 
@@ -491,8 +505,7 @@ func getLoadBalancerByTags(client *cloudstack.CloudStackClient, service *v1.Serv
 // extractIDs extracts the VM ID for each node, their unique network IDs and project ID
 func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, error) {
 	if len(nodes) == 0 {
-		klog.V(4).Info("skipping extractIDs for empty node slice")
-		return nil, nil, "", nil
+		return nil, nil, "", errors.New("no nodes available to add to load balancer")
 	}
 
 	environmentID, _ := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.config.Global.EnvironmentLabel)
@@ -539,6 +552,10 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 		}
 	}
 
+	if len(hostIDs) == 0 || len(networkIDs) == 0 {
+		return nil, nil, "", fmt.Errorf("unable to map kubernetes nodes to cloudstack instances for nodes: %v", nodeNames(nodes))
+	}
+
 	return hostIDs, networkIDs, projectID, nil
 }
 
@@ -554,7 +571,7 @@ func (cs *CSCloud) externalNIC(instance *cloudstack.VirtualMachine) (*cloudstack
 	return &instance.Nic[0], nil
 }
 
-func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service v1.Service) []*v1.Node {
+func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service *v1.Service) []*v1.Node {
 	if cs.config.Global.ServiceFilterLabel == "" || cs.config.Global.NodeFilterLabel == "" {
 		return nodes
 	}
@@ -613,6 +630,9 @@ func (lb *loadBalancer) updateLoadBalancerIP(service *v1.Service) error {
 	if err != nil {
 		return err
 	}
+	oldIP := lb.ip
+	lb.ip = *publicIP
+
 	if lb.rule != nil {
 		err = lb.deleteLoadBalancerRule()
 		if err != nil {
@@ -620,16 +640,12 @@ func (lb *loadBalancer) updateLoadBalancerIP(service *v1.Service) error {
 		}
 		lb.rule = nil
 	}
-	if !lb.ip.isValid() {
+
+	if !oldIP.isValid() {
 		return nil
 	}
 
-	err = lb.cloud.releaseIPIfManaged(lb.ip, service)
-	if err != nil {
-		return err
-	}
-	lb.ip = *publicIP
-	return nil
+	return lb.cloud.releaseIPIfManaged(oldIP, service)
 }
 
 func (pc *projectCloud) releaseIPIfManaged(ip cloudstackIP, service *v1.Service) error {
@@ -648,8 +664,9 @@ func (pc *projectCloud) releaseIPIfManaged(ip cloudstackIP, service *v1.Service)
 //
 // This function should try to find an IP address with the following priorities:
 // 1 - Find an existing public IP tagged for the service
-// 2 - Find a public IP matching service's Spec.LoadBalancerIP
-// 3 - Allocate a new random IP
+// 2 - Find an existing public IP matching Status.LoadBalancer.Ingress[0].IP
+// 3 - Find a public IP matching service's Spec.LoadBalancerIP
+// 4 - Allocate a new random IP
 //
 // On situation 3 we'll also tag the IP address so that we can reuse or free it
 // in the future. If tagging fails we should immediately release it.
@@ -665,9 +682,20 @@ func (pc *projectCloud) getLoadBalancerIP(service *v1.Service, networkID string)
 	if service.Spec.LoadBalancerIP != "" {
 		return pc.getPublicIPAddressByIP(service.Spec.LoadBalancerIP)
 	}
-	ip, err = pc.associatePublicIPAddress(service, networkID)
-	if err != nil {
-		return nil, err
+	ingresses := service.Status.LoadBalancer.Ingress
+	if len(ingresses) > 0 && ingresses[0].IP != "" {
+		ip, err = pc.getPublicIPAddressByIP(ingresses[0].IP)
+		if err != nil {
+			if _, ok := err.(IPNotFoundError); !ok {
+				return nil, err
+			}
+		}
+	}
+	if ip == nil {
+		ip, err = pc.associatePublicIPAddress(service, networkID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	err = pc.assignTagsToIP(ip, service)
 	if err != nil {
@@ -705,7 +733,9 @@ func (pc *projectCloud) tryPublicIPAddressByTags(service *v1.Service) (*cloudsta
 
 	p := client.Address.NewListPublicIpAddressesParams()
 	p.SetListall(true)
-	p.SetTags(tags)
+	p.SetTags(map[string]string{
+		serviceTag: tags[serviceTag],
+	})
 	if pc.projectID != "" {
 		p.SetProjectid(pc.projectID)
 	}
@@ -760,7 +790,7 @@ func (pc *projectCloud) getPublicIPAddressByIP(loadBalancerIP string) (*cloudsta
 	}
 
 	if l.Count == 0 {
-		return nil, fmt.Errorf("could not find IP address %v", loadBalancerIP)
+		return nil, IPNotFoundError{ip: loadBalancerIP}
 	}
 
 	if l.Count > 1 {
@@ -768,10 +798,6 @@ func (pc *projectCloud) getPublicIPAddressByIP(loadBalancerIP string) (*cloudsta
 	}
 
 	publicIP := l.PublicIpAddresses[0]
-	if publicIP.State == "Allocated" {
-		return nil, fmt.Errorf("unable to use IP %v, it's already allocated: %#v", loadBalancerIP, publicIP)
-	}
-
 	return &cloudstackIP{
 		address: publicIP.Ipaddress,
 		id:      publicIP.Id,
@@ -897,86 +923,59 @@ func (pc *projectCloud) releaseLoadBalancerIP(ip cloudstackIP) error {
 	return nil
 }
 
-func sortPorts(ports []v1.ServicePort) {
-	sort.Slice(ports, func(i, j int) bool {
-		return ports[i].Port < ports[j].Port
-	})
-}
-
-func comparePorts(service *v1.Service, rule *loadBalancerRule, lb *loadBalancer) (bool, error) {
-	ports := service.Spec.Ports
-	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
-	sortPorts(ports)
-	var additionalPorts []string
-	var targetPort int
-	var err error
-	for _, p := range ports[1:] {
-		if useTargetPort {
-			targetPort, err = lb.getTargetPort(p.TargetPort, service)
-			if err != nil {
-				return false, fmt.Errorf("Error resolving target port: %v", err)
-			}
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, targetPort))
-		} else {
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
-		}
-	}
-	sort.Strings(additionalPorts)
+func comparePorts(ports lbPorts, lb *loadBalancer) bool {
+	rule := lb.rule
 	sort.Strings(rule.AdditionalPortMap)
 	if len(rule.AdditionalPortMap) == 0 {
 		rule.AdditionalPortMap = nil
 	}
-	if useTargetPort {
-		targetPort, err = lb.getTargetPort(ports[0].TargetPort, service)
-		if err != nil {
-			return false, fmt.Errorf("Error resolving target port: %v", err)
-		}
-		return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
-			rule.Privateport == strconv.Itoa(targetPort) &&
-			rule.Publicport == strconv.Itoa(int(ports[0].Port)), nil
-	}
-	return reflect.DeepEqual(additionalPorts, rule.AdditionalPortMap) &&
-		rule.Privateport == strconv.Itoa(int(ports[0].NodePort)) &&
-		rule.Publicport == strconv.Itoa(int(ports[0].Port)), nil
+	return reflect.DeepEqual(ports.additionalPorts(), rule.AdditionalPortMap) &&
+		rule.Privateport == strconv.Itoa(ports.privatePort()) &&
+		rule.Publicport == strconv.Itoa(ports.publicPort()) &&
+		rule.Protocol == ports.protocol
+}
+
+type checkLBResult struct {
+	needsTags   bool
+	needsUpdate bool
+	exists      bool
 }
 
 // checkLoadBalancerRule checks if the rule already exists and if it does, if it can be updated. If
 // it does exist but cannot be updated, it will delete the existing rule so it can be created again.
-func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, service *v1.Service) (bool, bool, error) {
-	ports := service.Spec.Ports
+func (lb *loadBalancer) checkLoadBalancerRule(lbRuleName string, service *v1.Service) (checkLBResult, error) {
+	result := checkLBResult{}
 	if lb.rule == nil {
-		return false, false, nil
-	}
-	if len(ports) == 0 {
-		return false, false, errors.New("invalid ports")
+		return result, nil
 	}
 
 	// Check if any of the values we cannot update (those that require a new
 	// load balancer rule) are changed.
-	portDiff, err := comparePorts(service, lb.rule, lb)
+	newPorts, err := serviceToLBPorts(service, lb)
 	if err != nil {
-		return false, false, err
+		return result, err
 	}
-	if portDiff && lb.name == lb.rule.Name {
-		missingTags, err := lb.hasMissingTags()
-		if err != nil {
-			return false, false, err
+	portsEqual := comparePorts(newPorts, lb)
+
+	if portsEqual && lb.name == lb.rule.Name {
+		result.exists = true
+		result.needsUpdate = lb.rule.Algorithm != lb.algorithm
+		result.needsTags = lb.hasMissingTags()
+		if result.needsUpdate {
+			klog.V(4).Infof("checkLoadBalancerRule found differences for %v. existing algorithm: %v, new algorithm: %v", lb, lb.rule.Algorithm, lb.algorithm)
 		}
-		needsUpdate := lb.rule.Algorithm != lb.algorithm || missingTags
-		if needsUpdate {
-			klog.V(4).Infof("checkLoadBalancerRule found differences, needsUpdate true for LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
-		}
-		return true, needsUpdate, nil
+		return result, nil
 	}
 
-	klog.V(4).Infof("checkLoadBalancerRule found differences, will delete LB %s: rule: %#v, rule.LoadBalancerRule: %#v, lb: %#v, ports: %#v", lb, lb.rule, lb.rule.LoadBalancerRule, lb, ports)
+	klog.V(4).Infof("checkLoadBalancerRule found differences for %v in ports, will delete LB. existing ports: %#v, new ports: %v", lb, lb.rule.LoadBalancerRule, newPorts)
 
 	// Delete the load balancer rule so we can create a new one using the new values.
-	if err := lb.deleteLoadBalancerRule(); err != nil {
-		return false, false, err
+	err = lb.deleteLoadBalancerRule()
+	if err != nil {
+		return result, err
 	}
 
-	return false, false, nil
+	return result, nil
 }
 
 // updateLoadBalancerRule updates a load balancer rule.
@@ -991,61 +990,34 @@ func (lb *loadBalancer) updateLoadBalancerRule(service *v1.Service) error {
 
 	_, err = client.LoadBalancer.UpdateLoadBalancerRule(p)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to update load balancer %v: %v", lb, err)
 	}
 
-	return lb.cloud.assignTagsToRule(lb.rule, service)
+	return nil
 }
 
 // createLoadBalancerRule creates a new load balancer rule and returns it's ID.
 func (lb *loadBalancer) createLoadBalancerRule(lbRuleName string, service *v1.Service) (*loadBalancerRule, error) {
-	ports := service.Spec.Ports
 	client, err := lb.getClient()
-	var targetPort int
 	if err != nil {
 		return nil, err
 	}
-	if len(ports) == 0 {
-		return nil, errors.New("missing ports")
-	}
 
-	sortPorts(ports)
+	ports, err := serviceToLBPorts(service, lb)
+	if err != nil {
+		return nil, err
+	}
 
 	p := &cloudstack.CustomServiceParams{}
 	p.SetParam("algorithm", lb.algorithm)
 	p.SetParam("name", lbRuleName)
-	p.SetParam("privateport", int(ports[0].NodePort))
-	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
-	if useTargetPort {
-		if targetPort, err = lb.getTargetPort(ports[0].TargetPort, service); err != nil {
-			return nil, fmt.Errorf("error getting target port: %v", err)
-		}
-		p.SetParam("privateport", targetPort)
-	}
-	p.SetParam("publicport", int(ports[0].Port))
+	p.SetParam("privateport", ports.privatePort())
+	p.SetParam("publicport", ports.publicPort())
 	p.SetParam("networkid", lb.mainNetworkID)
 	p.SetParam("publicipid", lb.ip.id)
+	p.SetParam("protocol", ports.protocol)
 
-	switch ports[0].Protocol {
-	case v1.ProtocolTCP:
-		p.SetParam("protocol", "TCP")
-	case v1.ProtocolUDP:
-		p.SetParam("protocol", "UDP")
-	default:
-		return nil, fmt.Errorf("unsupported load balancer protocol: %v", ports[0].Protocol)
-	}
-
-	var additionalPorts []string
-	for _, p := range ports[1:] {
-		if useTargetPort {
-			if targetPort, err = lb.getTargetPort(p.TargetPort, service); err != nil {
-				return nil, fmt.Errorf("error getting target port: %v", err)
-			}
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, targetPort))
-		} else {
-			additionalPorts = append(additionalPorts, fmt.Sprintf("%d:%d", p.Port, p.NodePort))
-		}
-	}
+	additionalPorts := ports.additionalPorts()
 	if len(additionalPorts) > 0 {
 		p.SetParam("additionalportmap", strings.Join(additionalPorts, ","))
 	}
@@ -1109,17 +1081,19 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 		return fmt.Errorf("error list load balancer pools for %v: %v", lbRule.Name, err)
 	}
 
-	if listGloboNetworkPoolsResponse.Count < 1 {
+	if listGloboNetworkPoolsResponse.Count == 0 {
 		return fmt.Errorf("error list load balancer pools for %v: no LB pools found", lbRule.Name)
+	}
+
+	ports, err := serviceToLBPorts(service, lb)
+	if err != nil {
+		return err
 	}
 
 	updateGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
 	r := UpdateGloboNetworkPoolResponse{}
-	for idx := range service.Spec.Ports {
-		pool, err := lb.generateGloboNetworkPool(idx, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
-		if err != nil {
-			return fmt.Errorf("error waiting for load balancer rule job %v: %v", lbRule.Name, err)
-		}
+	for _, portInfo := range ports.ports {
+		pool := lb.generateGloboNetworkPool(portInfo, service, listGloboNetworkPoolsResponse.GloboNetworkPools)
 		if pool == nil {
 			continue
 		}
@@ -1144,29 +1118,19 @@ func (lb *loadBalancer) updateLoadBalancerPool(lbRule *loadBalancerRule, service
 	return nil
 }
 
-func (lb *loadBalancer) generateGloboNetworkPool(portsIdx int, service *v1.Service, globoPools []*globoNetworkPool) (*globoNetworkPool, error) {
-	var err error
-	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
-	ports := service.Spec.Ports
-	dstPort := int(ports[portsIdx].NodePort)
-	vipPort := int(ports[portsIdx].Port)
-
-	if useTargetPort {
-		if dstPort, err = lb.getTargetPort(ports[portsIdx].TargetPort, service); err != nil {
-			return nil, err
-		}
+func (lb *loadBalancer) generateGloboNetworkPool(portInfo lbPortInfo, service *v1.Service, globoPools []*globoNetworkPool) *globoNetworkPool {
+	if portInfo.name == "" {
+		return nil
 	}
 
-	if ports[portsIdx].Name == "" {
-		return nil, nil
-	}
-
-	namedService := ports[portsIdx].Name
+	dstPort := int(portInfo.privatePort)
+	vipPort := int(portInfo.publicPort)
+	namedService := portInfo.name
 	protocol := strings.Split(namedService, "-")[0]
 	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
 	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
 	if healthCheckMessage == "" || healthCheckResponse == "" {
-		return nil, nil
+		return nil
 	}
 
 	for _, pool := range globoPools {
@@ -1177,10 +1141,10 @@ func (lb *loadBalancer) generateGloboNetworkPool(portsIdx int, service *v1.Servi
 			pool.HealthCheck = healthCheckMessage
 			pool.HealthCheckExpected = healthCheckResponse
 			pool.HealthCheckType = protocol
-			return pool, nil
+			return pool
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 // deleteLoadBalancerRule deletes a load balancer rule.
@@ -1239,20 +1203,32 @@ func shouldManageLB(lb *loadBalancer, service *v1.Service) bool {
 	}
 	wantedTags := tagsForService(service)
 	optionalTags := map[string]struct{}{namespaceTag: {}}
+	hasAllTags := true
 	for tagKey, wantedValue := range wantedTags {
 		value, isTagSet := getTag(lb.rule.Tags, tagKey)
 		if _, isOptional := optionalTags[tagKey]; isOptional && !isTagSet {
 			continue
 		}
 		if !isTagSet || wantedValue != value {
-			klog.V(3).Infof("should NOT manage LB %s. Expected value for tag %q: %q, got: %q.", lb, tagKey, wantedValue, value)
-			return false
+			klog.V(3).Infof("Missing tags for LB %v. Expected value for tag %q: %q, got: %q.", lb, tagKey, wantedValue, value)
+			hasAllTags = false
+			break
 		}
 	}
-	return true
+
+	if hasAllTags {
+		return true
+	}
+
+	ingresses := service.Status.LoadBalancer.Ingress
+	if len(ingresses) == 1 && ingresses[0].Hostname == lb.name {
+		return true
+	}
+
+	return false
 }
 
-func (lb *loadBalancer) hasMissingTags() (bool, error) {
+func (lb *loadBalancer) hasMissingTags() bool {
 	wantedTags := []string{cloudProviderTag, serviceTag, namespaceTag}
 	tagMap := map[string]string{}
 	for _, lbTag := range lb.rule.Tags {
@@ -1261,10 +1237,10 @@ func (lb *loadBalancer) hasMissingTags() (bool, error) {
 	for _, t := range wantedTags {
 		_, hasTag := tagMap[t]
 		if !hasTag {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
 
 func getTag(tags []cloudstack.Tags, k string) (string, bool) {
@@ -1415,7 +1391,7 @@ func (lb *loadBalancer) removeHostsFromRule(lbRule *loadBalancerRule, hostIDs []
 
 func (lb *loadBalancer) setAlgorithm(service *v1.Service) error {
 	switch service.Spec.SessionAffinity {
-	case v1.ServiceAffinityNone:
+	case v1.ServiceAffinityNone, "":
 		lb.algorithm = "roundrobin"
 	case v1.ServiceAffinityClientIP:
 		lb.algorithm = "source"
@@ -1520,7 +1496,7 @@ func (lb *loadBalancer) getTargetPort(targetPort intstr.IntOrString, service *v1
 	if err != nil {
 		return 0, fmt.Errorf("error get endpoints: %v", err)
 	}
-	if len(endpoint.Subsets) < 1 {
+	if len(endpoint.Subsets) == 0 {
 		return 0, fmt.Errorf("no endpoints found for %s service on %s namespace", service.Name, service.Namespace)
 	}
 	ports := endpoint.Subsets[0].Ports
@@ -1529,7 +1505,7 @@ func (lb *loadBalancer) getTargetPort(targetPort intstr.IntOrString, service *v1
 			return int(port.Port), nil
 		}
 	}
-	return 0, fmt.Errorf("no port name \"%s\" found for endpoint service %s on namespace %s", targetPort.StrVal, service.Name, service.Namespace)
+	return 0, fmt.Errorf("no port name \"%s\" found for endpoint service %s on namespace %s", targetPort.String(), service.Name, service.Namespace)
 }
 
 func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
@@ -1565,4 +1541,106 @@ func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
 		}
 	}
 	return nil
+}
+
+func nodeNames(nodes []*v1.Node) string {
+	names := make([]string, len(nodes))
+	for i, n := range nodes {
+		names[i] = n.Name
+	}
+	return strings.Join(names, ",")
+}
+
+func createJSONPatchForLabel(key, value string) []byte {
+	const format = `[
+		{
+			"op": "add",
+			"path": "/metadata/labels/%s",
+			"value": "%s"
+		}
+	]`
+	return []byte(fmt.Sprintf(format, key, value))
+}
+
+func serviceToLBPorts(service *v1.Service, lb *loadBalancer) (lbPorts, error) {
+	ports := service.Spec.Ports
+	if len(ports) == 0 {
+		return lbPorts{}, errors.New("service ports are empty")
+	}
+	sortPorts(ports)
+
+	var protocol string
+	switch ports[0].Protocol {
+	case v1.ProtocolTCP, "":
+		protocol = "TCP"
+	case v1.ProtocolUDP:
+		protocol = "UDP"
+	default:
+		return lbPorts{}, fmt.Errorf("unsupported load balancer protocol: %v", ports[0].Protocol)
+	}
+
+	result := lbPorts{
+		protocol: protocol,
+	}
+
+	_, useTargetPort := getLabelOrAnnotation(service.ObjectMeta, lbUseTargetPort)
+	for _, p := range ports {
+		targetPort := int(p.NodePort)
+		if useTargetPort {
+			var err error
+			targetPort, err = lb.getTargetPort(p.TargetPort, service)
+			if err != nil {
+				return lbPorts{}, err
+			}
+		}
+		result.ports = append(result.ports, lbPortInfo{
+			publicPort:  int(p.Port),
+			privatePort: targetPort,
+			name:        p.Name,
+		})
+	}
+	return result, nil
+}
+
+func sortPorts(ports []v1.ServicePort) {
+	sort.Slice(ports, func(i, j int) bool {
+		return ports[i].Port < ports[j].Port
+	})
+}
+
+type lbPortInfo struct {
+	publicPort  int
+	privatePort int
+	name        string
+}
+
+type lbPorts struct {
+	ports    []lbPortInfo
+	protocol string
+}
+
+func (p *lbPorts) publicPort() int {
+	if len(p.ports) == 0 {
+		return 0
+	}
+	return p.ports[0].publicPort
+}
+
+func (p *lbPorts) privatePort() int {
+	if len(p.ports) == 0 {
+		return 0
+	}
+	return p.ports[0].privatePort
+}
+
+func (p *lbPorts) additionalPorts() []string {
+	if len(p.ports) < 2 {
+		return nil
+	}
+	var additional []string
+	for _, port := range p.ports[1:] {
+		additional = append(additional, fmt.Sprintf("%d:%d", port.publicPort, port.privatePort))
+	}
+	sort.Strings(additional)
+	return additional
 }

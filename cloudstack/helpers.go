@@ -22,6 +22,17 @@ type cloudstackManager struct {
 }
 
 func newCloudstackManager(client *cloudstack.CloudStackClient) (*cloudstackManager, error) {
+	m := &cloudstackManager{
+		client: client,
+	}
+	err := m.initCache()
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (m *cloudstackManager) initCache() error {
 	cache, err := ristretto.NewCache(&ristretto.Config{
 		NumCounters: 100000,   // Expected maximum items set to 10000, this value is 10x this number, as recommend by the docs.
 		MaxCost:     50 << 20, // Maximum cost of cache (50 MB).
@@ -33,12 +44,10 @@ func newCloudstackManager(client *cloudstack.CloudStackClient) (*cloudstackManag
 		},
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &cloudstackManager{
-		cache:  cache,
-		client: client,
-	}, nil
+	m.cache = cache
+	return nil
 }
 
 func (m *cloudstackManager) virtualMachineByName(name, projectID string) (*cloudstack.VirtualMachine, error) {
