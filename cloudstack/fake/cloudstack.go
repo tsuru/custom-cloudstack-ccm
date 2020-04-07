@@ -95,6 +95,22 @@ func (s *CloudstackServer) AddTags(resourceid string, tags []cloudstack.Tags) {
 	s.tags[resourceid] = tags
 }
 
+func (s *CloudstackServer) DeleteTags(resourceid string, tagKeys []string) {
+	var newTags []cloudstack.Tags
+	tags := s.tags[resourceid]
+	keySet := map[string]struct{}{}
+	for _, key := range tagKeys {
+		keySet[key] = struct{}{}
+	}
+	for _, tag := range tags {
+		if _, ok := keySet[tag.Key]; ok {
+			continue
+		}
+		newTags = append(newTags, tag)
+	}
+	s.tags[resourceid] = newTags
+}
+
 func (s *CloudstackServer) SetDefaultLBPoolCreation(lbId string) {
 	lbName := s.lbNameByID(lbId)
 	lbRule := s.lbRules[lbName]
@@ -148,8 +164,31 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch cmd {
 	case "listVirtualMachines":
-		w.Write([]byte(`{"listVirtualMachinesResponse": {"count": 1, "virtualmachine": [{"name": "n1", "id": "vm1", "nic": [{"networkid": "net1"}]}]}}`))
-
+		name := r.FormValue("name")
+		if name == "notfound" {
+			w.Write(MarshalResponse("listVirtualMachinesResponse", map[string]interface{}{
+				"count":          0,
+				"virtualmachine": []map[string]interface{}{},
+			}))
+			return
+		}
+		numberParts := regexp.MustCompile(`.*(\d+)`).FindStringSubmatch(name)
+		number := 1
+		if len(numberParts) == 2 {
+			number, _ = strconv.Atoi(numberParts[1])
+		}
+		w.Write(MarshalResponse("listVirtualMachinesResponse", map[string]interface{}{
+			"count": 1,
+			"virtualmachine": []map[string]interface{}{
+				{
+					"name": name,
+					"id":   fmt.Sprintf("vm%d", number),
+					"nic": []map[string]interface{}{
+						{"networkid": fmt.Sprintf("net%d", number)},
+					},
+				},
+			},
+		}))
 	case "listLoadBalancerRules":
 		keyword := r.FormValue("keyword")
 		queryTags := parseTags(r.Form)
@@ -421,6 +460,31 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Id: vmID,
 				})
 			}
+			return obj
+		}
+
+	case "removeFromLoadBalancerRule":
+		ruleId := r.FormValue("id")
+		vms := r.FormValue("virtualmachineids")
+		vmIDSet := map[string]struct{}{}
+		if vms != "" {
+			for _, vmID := range strings.Split(vms, ",") {
+				vmIDSet[vmID] = struct{}{}
+			}
+		}
+		hostAssignIdx := s.newID(cmd)
+		obj := cloudstack.AssignToLoadBalancerRuleResponse{
+			JobID: fmt.Sprintf("job-host-remove-%d", hostAssignIdx),
+		}
+		w.Write(MarshalResponse("removeFromLoadBalancerRuleResponse", obj))
+		s.Jobs[obj.JobID] = func() interface{} {
+			var newVMs []*cloudstack.VirtualMachine
+			for _, vm := range s.vms[ruleId] {
+				if _, ok := vmIDSet[vm.Id]; !ok {
+					newVMs = append(newVMs, vm)
+				}
+			}
+			s.vms[ruleId] = newVMs
 			return obj
 		}
 
