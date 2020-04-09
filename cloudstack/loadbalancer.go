@@ -47,9 +47,10 @@ const (
 
 	removeLBsOnDeleteLabelKey = "csccm.cloudprovider.io/remove-loadbalancers-on-delete"
 
-	cloudProviderTag = "cloudprovider"
-	serviceTag       = "kubernetes_service"
-	namespaceTag     = "kubernetes_namespace"
+	cloudProviderTag       = "cloudprovider"
+	serviceTag             = "kubernetes_service"
+	namespaceTag           = "kubernetes_namespace"
+	cloudProviderIgnoreTag = "cloudprovider-ignore"
 
 	CloudstackResourceIPAdress     = "PublicIpAddress"
 	CloudstackResourceLoadBalancer = "LoadBalancer"
@@ -132,6 +133,10 @@ func (ip cloudstackIP) isValid() bool {
 
 // GetLoadBalancer returns whether the specified load balancer exists, and if so, what its status is.
 func (cs *CSCloud) GetLoadBalancer(ctx context.Context, clusterName string, service *v1.Service) (*v1.LoadBalancerStatus, bool, error) {
+	if service == nil {
+		return nil, false, fmt.Errorf("GetLoadBalancer: service cannot be nil")
+	}
+
 	klog.V(5).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
@@ -160,6 +165,10 @@ func (cs *CSCloud) GetLoadBalancer(ctx context.Context, clusterName string, serv
 
 // EnsureLoadBalancer creates a new load balancer, or updates the existing one. Returns the status of the balancer.
 func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
+	if service == nil {
+		return nil, fmt.Errorf("EnsureLoadBalancer: service cannot be nil")
+	}
+
 	klog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, ports: %d, nodes: %d)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, len(service.Spec.Ports), len(nodes))
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
@@ -273,6 +282,10 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 
 // UpdateLoadBalancer updates hosts under the specified load balancer.
 func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) error {
+	if service == nil {
+		return fmt.Errorf("UpdateLoadBalancer: service cannot be nil")
+	}
+
 	klog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
@@ -307,7 +320,7 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 // nil if the load balancer specified either didn't exist or was successfully deleted.
 func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName string, service *v1.Service) error {
 	if service == nil {
-		return fmt.Errorf("service cannot be nil")
+		return fmt.Errorf("EnsureLoadBalancerDeleted: service cannot be nil")
 	}
 
 	klog.V(5).Infof("EnsureLoadBalancerDeleted(%v, %v, %v)", clusterName, service.Namespace, service.Name)
@@ -596,6 +609,10 @@ func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service *v1.Servi
 // concatanation of the service name and the environment load balancer domain
 // for the environent
 func (cs *CSCloud) GetLoadBalancerName(ctx context.Context, clusterName string, service *v1.Service) string {
+	if service == nil {
+		return ""
+	}
+
 	return cs.getLoadBalancerName(service)
 }
 
@@ -1203,6 +1220,11 @@ func shouldManageIP(ip cloudstack.PublicIpAddress, service *v1.Service) bool {
 func shouldManageLB(lb *loadBalancer, service *v1.Service) error {
 	if lb.rule == nil {
 		return nil
+	}
+
+	_, ignoredSet := getTag(lb.rule.Tags, cloudProviderIgnoreTag)
+	if ignoredSet {
+		return fmt.Errorf("should not manage %v, tag %q is set", lb, cloudProviderIgnoreTag)
 	}
 
 	wantedTags := tagsForService(service)
