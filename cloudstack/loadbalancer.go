@@ -201,9 +201,10 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 
 	klog.V(4).Infof("Ensuring Load Balancer: %v", lb)
 
-	if lb.rule != nil && !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping EnsureLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb)
-		return nil, fmt.Errorf("LB %s not managed by cloudprovider", lb)
+	err = shouldManageLB(lb, service)
+	if err != nil {
+		klog.V(3).Infof("Skipping EnsureLoadBalancer for service %s/%s: %v", service.Namespace, service.Name, err)
+		return nil, err
 	}
 
 	err = lb.loadLoadBalancerIP(service)
@@ -293,8 +294,9 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 		return nil
 	}
 
-	if !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s and LB %s", service.Namespace, service.Name, lb)
+	err = shouldManageLB(lb, service)
+	if err != nil {
+		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s: %v", service.Namespace, service.Name, err)
 		return nil
 	}
 
@@ -328,8 +330,9 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 		return nil
 	}
 
-	if !shouldManageLB(lb, service) {
-		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s and LB %q", service.Namespace, service.Name, lb)
+	err = shouldManageLB(lb, service)
+	if err != nil {
+		klog.V(3).Infof("Skipping EnsureLoadBalancerDeleted for service %s/%s: %v", service.Namespace, service.Name, err)
 		return nil
 	}
 
@@ -1197,35 +1200,40 @@ func shouldManageIP(ip cloudstack.PublicIpAddress, service *v1.Service) bool {
 }
 
 // shouldManageLB checks if LB has the provider tag and the corresponding service tags
-func shouldManageLB(lb *loadBalancer, service *v1.Service) bool {
+func shouldManageLB(lb *loadBalancer, service *v1.Service) error {
 	if lb.rule == nil {
-		return true
+		return nil
 	}
+
 	wantedTags := tagsForService(service)
 	optionalTags := map[string]struct{}{namespaceTag: {}}
-	hasAllTags := true
+	var missingTags []string
 	for tagKey, wantedValue := range wantedTags {
 		value, isTagSet := getTag(lb.rule.Tags, tagKey)
 		if _, isOptional := optionalTags[tagKey]; isOptional && !isTagSet {
 			continue
 		}
 		if !isTagSet || wantedValue != value {
-			klog.V(3).Infof("Missing tags for LB %v. Expected value for tag %q: %q, got: %q.", lb, tagKey, wantedValue, value)
-			hasAllTags = false
-			break
+			missingTags = append(missingTags, fmt.Sprintf("tag %q: expected: %q, got: %q", tagKey, wantedValue, value))
 		}
 	}
 
-	if hasAllTags {
-		return true
+	if len(missingTags) == 0 {
+		return nil
 	}
+
+	var statusHostname string
 
 	ingresses := service.Status.LoadBalancer.Ingress
-	if len(ingresses) == 1 && ingresses[0].Hostname == lb.name {
-		return true
+	if len(ingresses) == 1 {
+		statusHostname = ingresses[0].Hostname
+		if statusHostname == lb.name {
+			return nil
+		}
 	}
 
-	return false
+	sort.Strings(missingTags)
+	return fmt.Errorf("should not manage %v - status hostname: %q - missing tags: %s", lb, statusHostname, strings.Join(missingTags, " - "))
 }
 
 func (lb *loadBalancer) hasMissingTags() bool {

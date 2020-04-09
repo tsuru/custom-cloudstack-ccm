@@ -1582,7 +1582,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: baseSvc,
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
-						assert.EqualError(t, err, `LB lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)) not managed by cloudprovider`)
+						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
@@ -1857,7 +1857,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: baseSvc,
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
-						assert.EqualError(t, err, `LB lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)) not managed by cloudprovider`)
+						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
