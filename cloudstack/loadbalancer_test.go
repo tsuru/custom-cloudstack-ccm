@@ -15,7 +15,6 @@ import (
 	cloudstackFake "github.com/tsuru/custom-cloudstack-ccm/cloudstack/fake"
 	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -63,7 +62,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		},
 	}
 
-	baseAssert := func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+	baseAssert := func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 		require.NoError(t, err)
 		assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 			Ingress: []corev1.LoadBalancerIngress{
@@ -100,15 +99,15 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		})
 	}
 
-	assertSvcWithProject := func(t *testing.T, svc *v1.Service) {
+	assertSvcWithProject := func(t *testing.T, svc *corev1.Service) {
 		assert.Equal(t, "11111111-2222-3333-4444-555555555555", svc.Labels["project-label"])
 	}
 
 	type consecutiveCall struct {
 		svc       corev1.Service
 		nodes     []*corev1.Node
-		assert    func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error)
-		assertSvc func(t *testing.T, svc *v1.Service)
+		assert    func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error)
+		assertSvc func(t *testing.T, svc *corev1.Service)
 	}
 
 	tests := []struct {
@@ -137,7 +136,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.Ports = nil
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `requested load balancer with no ports`)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{})
 					},
@@ -154,7 +153,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -180,7 +179,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc:   baseSvc,
 					nodes: []*corev1.Node{},
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `no nodes available to add to load balancer`)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{})
 					},
@@ -205,7 +204,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							n2,
 						}
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -246,7 +245,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							n2,
 						}
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -278,7 +277,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							n1,
 						}
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `no nodes available to add to load balancer`)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{})
 					},
@@ -302,7 +301,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							n1,
 						}
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `unable to map kubernetes nodes to cloudstack instances for nodes: notfound`)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"notfound"}}},
@@ -328,7 +327,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							n2,
 						}
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -364,7 +363,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.Ports[0].NodePort = 30002
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -404,7 +403,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Annotations["csccm.cloudprovider.io/associateipaddress-extra-param-lbenvironmentid"] = "3"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -453,7 +452,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Annotations["csccm.cloudprovider.io/createloadbalancer-extra-param-dsr"] = "true"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -526,7 +525,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Name: "https-bar", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
 						assert.Contains(t, err.Error(), "error list load balancer pools for svc1.test.com: no LB pools found")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -572,7 +571,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Name: "https-bar", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -605,7 +604,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Name: "https-foo", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -661,7 +660,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Name: "https-foo", Port: 8443, NodePort: 30002, TargetPort: intstr.IntOrString{IntVal: 8443}, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -725,7 +724,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Name: "https-foo", Port: 8443, NodePort: 30002, TargetPort: intstr.FromString("https-foo"), Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -777,7 +776,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -826,7 +825,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Name: "https-bar", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -856,7 +855,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -885,7 +884,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Labels["csccm.cloudprovider.io/loadbalancer-name"] = "foo.bar.com"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -929,7 +928,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Labels["csccm.cloudprovider.io/loadbalancer-name-suffix"] = "anotherrealm.com"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -970,7 +969,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.Ports = []corev1.ServicePort{{Port: 80, NodePort: 30002, TargetPort: intstr.IntOrString{IntVal: 80}, Protocol: corev1.ProtocolTCP}, {Port: 443, NodePort: 30003, TargetPort: intstr.IntOrString{IntVal: 443}, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1039,7 +1038,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.Ports[0].NodePort = 30003
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1087,7 +1086,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
 						require.Contains(t, err.Error(), "my error")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1110,7 +1109,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -1153,7 +1152,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
 						require.Contains(t, err.Error(), "my error")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1187,7 +1186,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -1215,7 +1214,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.SessionAffinity = corev1.ServiceAffinityClientIP
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1251,7 +1250,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
 						assert.Contains(t, err.Error(), "my error")
 						assert.NotContains(t, err.Error(), "error rolling back")
@@ -1271,7 +1270,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1319,7 +1318,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.LoadBalancerIP = "192.168.9.9"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
 						assert.Contains(t, err.Error(), "could not find IP address 192.168.9.9")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1349,7 +1348,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.LoadBalancerIP = "192.168.9.9"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1412,7 +1411,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1453,7 +1452,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.LoadBalancerIP = "192.168.9.9"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1500,7 +1499,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.LoadBalancerIP = "192.168.9.9"
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
 						assert.Contains(t, err.Error(), "could not find IP address 192.168.9.9")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1524,12 +1523,12 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						svc.Status.LoadBalancer.Ingress = []v1.LoadBalancerIngress{
+						svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
 							{IP: "192.168.9.9"},
 						}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1581,7 +1580,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1616,7 +1615,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1654,7 +1653,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `load balancer svc1.test.com for service myns/svc1 get rule error: CloudStack API error 999 (CSExceptionErrorCode: 999): myerror`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1672,10 +1671,10 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: (func() corev1.Service {
 						svc := baseSvc.DeepCopy()
-						svc.Spec.SessionAffinity = v1.ServiceAffinity("invalid")
+						svc.Spec.SessionAffinity = corev1.ServiceAffinity("invalid")
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `unsupported load balancer affinity: invalid`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1700,7 +1699,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `unable to patch service with project-id label: my patch error`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1726,7 +1725,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `error get endpoints: endpoints "svc1" not found`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1766,7 +1765,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						}
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `error get endpoints: endpoints "svc1" not found`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1801,7 +1800,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Spec.SessionAffinity = corev1.ServiceAffinityClientIP
 						return *svc
 					})(),
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.EqualError(t, err, `unable to update load balancer lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)): CloudStack API error 999 (CSExceptionErrorCode: 999): myerror`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1831,7 +1830,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `error adding tags to LoadBalancer lbrule-1: CloudStack API error 999 (CSExceptionErrorCode: 999): my error`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1856,7 +1855,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1899,7 +1898,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `error adding tags to LoadBalancer lbrule-1: CloudStack API error 999 (CSExceptionErrorCode: 999): my error`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -1910,7 +1909,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.NoError(t, err)
 						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
 							Ingress: []corev1.LoadBalancerIngress{
@@ -1956,7 +1955,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			calls: []consecutiveCall{
 				{
 					svc: baseSvc,
-					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)), tag "cloudprovider-ignore" is set`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
@@ -2076,13 +2075,13 @@ func Test_CSCloud_GetLoadBalancer(t *testing.T) {
 		name        string
 		svc         corev1.Service
 		hook        func(t *testing.T, srv *cloudstackFake.CloudstackServer)
-		assert      func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, exists bool, err error)
+		assert      func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, exists bool, err error)
 		ensureNodes []*corev1.Node
 	}{
 		{
 			name: "load balancer not found",
 			svc:  baseSvc,
-			assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, exists bool, err error) {
+			assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, exists bool, err error) {
 				assert.NoError(t, err)
 				assert.Equal(t, exists, false)
 				assert.Nil(t, lbStatus)
@@ -2096,11 +2095,11 @@ func Test_CSCloud_GetLoadBalancer(t *testing.T) {
 			name:        "load balancer found",
 			svc:         baseSvc,
 			ensureNodes: baseNodes,
-			assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, exists bool, err error) {
+			assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, exists bool, err error) {
 				assert.NoError(t, err)
 				assert.Equal(t, exists, true)
-				assert.Equal(t, &v1.LoadBalancerStatus{
-					Ingress: []v1.LoadBalancerIngress{
+				assert.Equal(t, &corev1.LoadBalancerStatus{
+					Ingress: []corev1.LoadBalancerIngress{
 						{Hostname: "svc1.test.com", IP: "10.0.0.1"},
 					},
 				}, lbStatus)
@@ -2123,7 +2122,7 @@ func Test_CSCloud_GetLoadBalancer(t *testing.T) {
 					return false
 				}
 			},
-			assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, exists bool, err error) {
+			assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, exists bool, err error) {
 				assert.EqualError(t, err, `load balancer svc1.test.com for service myns/svc1 get rule error: CloudStack API error 999 (CSExceptionErrorCode: 999): myerror`)
 				assert.Equal(t, exists, false)
 				assert.Nil(t, lbStatus)
@@ -2782,7 +2781,7 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 }
 
 func TestFilterNodesMatchingLabels(t *testing.T) {
-	nodes := []*v1.Node{
+	nodes := []*corev1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool1"}}},
 		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool2"}}},
 		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool2"}}},
@@ -2794,7 +2793,7 @@ func TestFilterNodesMatchingLabels(t *testing.T) {
 		name          string
 		cs            CSCloud
 		service       corev1.Service
-		expectedNodes []*v1.Node
+		expectedNodes []*corev1.Node
 	}{
 		{"matchSingle", CSCloud{
 			config: CSConfig{
@@ -2843,7 +2842,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 1234, NodePort: 4567, Protocol: v1.ProtocolTCP},
+				{Port: 1234, NodePort: 4567, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				LoadBalancerRule: &cloudstack.LoadBalancerRule{
@@ -2862,7 +2861,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 1234, NodePort: 4567, Protocol: v1.ProtocolTCP},
+				{Port: 1234, NodePort: 4567, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
@@ -2882,10 +2881,10 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 5, NodePort: 6, Protocol: v1.ProtocolTCP},
-				{Port: 2, NodePort: 20, Protocol: v1.ProtocolTCP},
-				{Port: 10, NodePort: 5, Protocol: v1.ProtocolTCP},
-				{Port: 3, NodePort: 4, Protocol: v1.ProtocolTCP},
+				{Port: 5, NodePort: 6, Protocol: corev1.ProtocolTCP},
+				{Port: 2, NodePort: 20, Protocol: corev1.ProtocolTCP},
+				{Port: 10, NodePort: 5, Protocol: corev1.ProtocolTCP},
+				{Port: 3, NodePort: 4, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{
@@ -2908,10 +2907,10 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 5, NodePort: 6, Protocol: v1.ProtocolTCP},
-				{Port: 2, NodePort: 20, Protocol: v1.ProtocolTCP},
-				{Port: 10, NodePort: 5, Protocol: v1.ProtocolTCP},
-				{Port: 3, NodePort: 4, Protocol: v1.ProtocolTCP},
+				{Port: 5, NodePort: 6, Protocol: corev1.ProtocolTCP},
+				{Port: 2, NodePort: 20, Protocol: corev1.ProtocolTCP},
+				{Port: 10, NodePort: 5, Protocol: corev1.ProtocolTCP},
+				{Port: 3, NodePort: 4, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
@@ -2932,7 +2931,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 1, NodePort: 2, Protocol: v1.ProtocolTCP},
+				{Port: 1, NodePort: 2, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
@@ -2953,7 +2952,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 1, NodePort: 2, Protocol: v1.ProtocolTCP},
+				{Port: 1, NodePort: 2, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
@@ -2974,7 +2973,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 1, NodePort: 2, Protocol: v1.ProtocolTCP},
+				{Port: 1, NodePort: 2, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
@@ -2995,9 +2994,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		{
 			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
 			svcPorts: []corev1.ServicePort{
-				{Port: 1, NodePort: 2, TargetPort: intstr.IntOrString{IntVal: 10}, Protocol: v1.ProtocolTCP},
-				{Port: 2, NodePort: 20, TargetPort: intstr.IntOrString{IntVal: 40}, Protocol: v1.ProtocolTCP},
-				{Port: 3, NodePort: 30, TargetPort: intstr.IntOrString{IntVal: 50}, Protocol: v1.ProtocolTCP},
+				{Port: 1, NodePort: 2, TargetPort: intstr.IntOrString{IntVal: 10}, Protocol: corev1.ProtocolTCP},
+				{Port: 2, NodePort: 20, TargetPort: intstr.IntOrString{IntVal: 40}, Protocol: corev1.ProtocolTCP},
+				{Port: 3, NodePort: 30, TargetPort: intstr.IntOrString{IntVal: 50}, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{
@@ -3029,10 +3028,10 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				}}),
 			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
 			svcPorts: []corev1.ServicePort{
-				{Port: 80, NodePort: 2, TargetPort: intstr.FromString("http"), Protocol: v1.ProtocolTCP},
-				{Port: 443, NodePort: 20, TargetPort: intstr.FromString("https"), Protocol: v1.ProtocolTCP},
-				{Port: 3, NodePort: 30, TargetPort: intstr.FromString("40"), Protocol: v1.ProtocolTCP},
-				{Port: 4, NodePort: 30, TargetPort: intstr.FromInt(50), Protocol: v1.ProtocolTCP},
+				{Port: 80, NodePort: 2, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
+				{Port: 443, NodePort: 20, TargetPort: intstr.FromString("https"), Protocol: corev1.ProtocolTCP},
+				{Port: 3, NodePort: 30, TargetPort: intstr.FromString("40"), Protocol: corev1.ProtocolTCP},
+				{Port: 4, NodePort: 30, TargetPort: intstr.FromInt(50), Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{
@@ -3065,9 +3064,9 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 				}}),
 			annotations: map[string]string{"csccm.cloudprovider.io/loadbalancer-use-targetport": "true"},
 			svcPorts: []corev1.ServicePort{
-				{Port: 80, NodePort: 2, TargetPort: intstr.FromString("http"), Protocol: v1.ProtocolTCP},
-				{Port: 443, NodePort: 20, TargetPort: intstr.FromString("https"), Protocol: v1.ProtocolTCP},
-				{Port: 3, NodePort: 30, TargetPort: intstr.FromString("40"), Protocol: v1.ProtocolTCP},
+				{Port: 80, NodePort: 2, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
+				{Port: 443, NodePort: 20, TargetPort: intstr.FromString("https"), Protocol: corev1.ProtocolTCP},
+				{Port: 3, NodePort: 30, TargetPort: intstr.FromString("40"), Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{
@@ -3091,7 +3090,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 1, NodePort: 2, Protocol: v1.ProtocolTCP},
+				{Port: 1, NodePort: 2, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
@@ -3111,7 +3110,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 		},
 		{
 			svcPorts: []corev1.ServicePort{
-				{Port: 4, NodePort: 40, Protocol: v1.ProtocolTCP},
+				{Port: 4, NodePort: 40, Protocol: corev1.ProtocolTCP},
 			},
 			rule: &loadBalancerRule{
 				AdditionalPortMap: []string{},
