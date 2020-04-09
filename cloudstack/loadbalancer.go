@@ -1282,20 +1282,6 @@ func getTag(tags []cloudstack.Tags, k string) (string, bool) {
 	return "", false
 }
 
-func (lb *loadBalancer) deleteTags(service *v1.Service) error {
-	client, err := lb.getClient()
-	if err != nil {
-		return err
-	}
-	if lb.rule == nil {
-		return nil
-	}
-	p := client.Resourcetags.NewDeleteTagsParams([]string{lb.rule.Id}, CloudstackResourceLoadBalancer)
-	p.SetTags(tagsForService(service))
-	_, err = client.Resourcetags.DeleteTags(p)
-	return err
-}
-
 func tagsForService(service *v1.Service) map[string]string {
 	return map[string]string{
 		cloudProviderTag: ProviderName,
