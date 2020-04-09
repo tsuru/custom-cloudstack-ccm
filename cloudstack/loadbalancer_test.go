@@ -1931,6 +1931,42 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "fails with ignore tag set",
+			hook: func(t *testing.T, srv *cloudstackFake.CloudstackServer) {
+				srv.AddLBRule("svc1.test.gom", cloudstackFake.LoadBalancerRule{Rule: map[string]interface{}{
+					"id":         "lbrule-1",
+					"name":       "svc1.test.com",
+					"publicip":   "10.0.0.1",
+					"publicipid": "ip-1",
+					"networkid":  "1234",
+				}})
+				srv.AddIP(cloudstack.PublicIpAddress{
+					Id:        "ip-1",
+					Ipaddress: "10.0.0.1",
+				})
+				srv.AddTags("lbrule-1", []cloudstack.Tags{
+					{Key: "cloudprovider-ignore", Value: "1"},
+					{Key: "cloudprovider", Value: "custom-cloudstack"},
+					{Key: "kubernetes_service", Value: "svc1"},
+					{Key: "kubernetes_namespace", Value: "myns"},
+				})
+			},
+			calls: []consecutiveCall{
+				{
+					svc: baseSvc,
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *v1.LoadBalancerStatus, err error) {
+						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com) ip(ip-1, 10.0.0.1)), tag "cloudprovider-ignore" is set`)
+						assert.Nil(t, lbStatus)
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n1"}, "projectid": []string{"11111111-2222-3333-4444-555555555555"}}},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+						})
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -2461,7 +2497,7 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 			name: "service is not provided",
 			assert: func(t *testing.T, err error, cs *cloudstackFake.CloudstackServer) {
 				require.Error(t, err)
-				assert.EqualError(t, err, "service cannot be nil")
+				assert.EqualError(t, err, "EnsureLoadBalancerDeleted: service cannot be nil")
 			},
 		},
 		{
