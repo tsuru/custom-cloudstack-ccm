@@ -126,12 +126,6 @@ func (cs *CSCloud) nodeAddresses(instance *cloudstack.VirtualMachine) ([]v1.Node
 	return addresses, nil
 }
 
-// ExternalID returns the cloud provider ID of the specified instance (deprecated).
-func (cs *CSCloud) ExternalID(ctx context.Context, name types.NodeName) (string, error) {
-	klog.V(4).Infof("ExternalID(%v)", name)
-	return cs.InstanceID(ctx, name)
-}
-
 // InstanceID returns the cloud provider ID of the specified instance.
 func (cs *CSCloud) InstanceID(ctx context.Context, name types.NodeName) (string, error) {
 	klog.V(4).Infof("InstanceID(%v)", name)

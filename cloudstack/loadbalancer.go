@@ -1501,7 +1501,7 @@ func getFirstRawValue(raw json.RawMessage) (json.RawMessage, error) {
 	for _, v := range m {
 		return v, nil
 	}
-	return nil, fmt.Errorf("Unable to extract the raw value from:\n\n%s\n\n", string(raw))
+	return nil, fmt.Errorf("unable to extract the raw value from: %q", string(raw))
 }
 
 func (lb *loadBalancer) getTargetPort(targetPort intstr.IntOrString, service *v1.Service) (int, error) {
