@@ -253,7 +253,7 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 	}
 
 	if result.needsTags {
-		if err = lb.cloud.assignTagsToRule(lb.rule, service); err != nil {
+		if err = lb.assignTagsToRule(); err != nil {
 			return nil, err
 		}
 	}
@@ -273,7 +273,7 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		}
 
 		klog.V(4).Infof("Assigning tag to load balancer rule: %v", lb)
-		if err = lb.cloud.assignTagsToRule(lb.rule, service); err != nil {
+		if err = lb.assignTagsToRule(); err != nil {
 			return nil, err
 		}
 	}
@@ -1300,8 +1300,8 @@ func tagsForService(service *v1.Service) map[string]string {
 	}
 }
 
-func (pc *projectCloud) assignTagsToRule(lbRule *loadBalancerRule, service *v1.Service) error {
-	return pc.setDefaultTags(CloudstackResourceLoadBalancer, lbRule.Id, service)
+func (lb *loadBalancer) assignTagsToRule() error {
+	return lb.cloud.setDefaultTags(CloudstackResourceLoadBalancer, lb.rule.Id, lb.service)
 }
 
 func (pc *projectCloud) assignTagsToIP(ip *cloudstackIP, service *v1.Service) error {
@@ -1340,41 +1340,41 @@ func (pc *projectCloud) setResourceTags(resourceType, resourceID string, tags ma
 }
 
 // assignHostsToRule assigns hosts to a load balancer rule.
-func (lb *loadBalancer) assignHostsToRule(lbRule *loadBalancerRule, hostIDs []string) error {
+func (lb *loadBalancer) assignHostsToRule(hostIDs []string) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
 	}
-	p := client.LoadBalancer.NewAssignToLoadBalancerRuleParams(lbRule.Id)
+	p := client.LoadBalancer.NewAssignToLoadBalancerRuleParams(lb.rule.Id)
 	p.SetVirtualmachineids(hostIDs)
 
 	if _, err := client.LoadBalancer.AssignToLoadBalancerRule(p); err != nil {
-		return fmt.Errorf("error assigning hosts to load balancer rule %v: %v", lbRule.Id, err)
+		return fmt.Errorf("error assigning hosts to %v: %v", lb, err)
 	}
 
 	return nil
 }
 
 // assignNetworksToRule assigns networks to a load balancer rule.
-func (lb *loadBalancer) assignNetworksToRule(lbRule *loadBalancerRule, networkIDs []string) error {
+func (lb *loadBalancer) assignNetworksToRule(networkIDs []string) error {
 	if lb.cloud.config.Command.AssignNetworks == "" {
 		return nil
 	}
 	for i := range networkIDs {
-		if err := lb.assignNetworkToRule(lbRule, networkIDs[i]); err != nil {
+		if err := lb.assignNetworkToRule(networkIDs[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID string) error {
-	klog.V(4).Infof("assign network %q to rule %s", networkID, lbRule.Id)
+func (lb *loadBalancer) assignNetworkToRule(networkID string) error {
+	klog.V(4).Infof("assign network %q to %v", networkID, lb)
 	p := &cloudstack.CustomServiceParams{}
 	if lb.cloud.projectID != "" {
 		p.SetParam("projectid", lb.cloud.projectID)
 	}
-	p.SetParam("id", lbRule.Id)
+	p.SetParam("id", lb.rule.Id)
 	p.SetParam("networkids", []string{networkID})
 	client, err := lb.getClient()
 	if err != nil {
@@ -1384,7 +1384,7 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 		JobID string `json:"jobid"`
 	}
 	if err = client.Custom.CustomRequest(lb.cloud.config.Command.AssignNetworks, p, &result); err != nil {
-		return fmt.Errorf("error assigning networks to load balancer rule %s using endpoint %q: %v ", lbRule.Name, lb.cloud.config.Command.AssignNetworks, err)
+		return fmt.Errorf("error assigning networks to %v using cmd %q: %v ", lb, lb.cloud.config.Command.AssignNetworks, err)
 	}
 	if result.JobID != "" {
 		klog.V(4).Infof("Querying async job %s for cmd %q for load balancer %v", result.JobID, lb.cloud.config.Command.AssignNetworks, lb)
@@ -1400,16 +1400,16 @@ func (lb *loadBalancer) assignNetworkToRule(lbRule *loadBalancerRule, networkID 
 }
 
 // removeHostsFromRule removes hosts from a load balancer rule.
-func (lb *loadBalancer) removeHostsFromRule(lbRule *loadBalancerRule, hostIDs []string) error {
+func (lb *loadBalancer) removeHostsFromRule(hostIDs []string) error {
 	client, err := lb.getClient()
 	if err != nil {
 		return err
 	}
-	p := client.LoadBalancer.NewRemoveFromLoadBalancerRuleParams(lbRule.Id)
+	p := client.LoadBalancer.NewRemoveFromLoadBalancerRuleParams(lb.rule.Id)
 	p.SetVirtualmachineids(hostIDs)
 
 	if _, err := client.LoadBalancer.RemoveFromLoadBalancerRule(p); err != nil {
-		return fmt.Errorf("error removing hosts from load balancer rule %v: %v", lbRule.Name, err)
+		return fmt.Errorf("error removing hosts from %v: %v", lb, err)
 	}
 
 	return nil
@@ -1550,19 +1550,19 @@ func (lb *loadBalancer) syncNodes(hostIDs, networkIDs []string) error {
 
 	if len(assign) > 0 {
 		klog.V(4).Infof("Assigning networks (%v) to load balancer: %v", networkIDs, lb)
-		if err := lb.assignNetworksToRule(lb.rule, networkIDs); err != nil {
+		if err := lb.assignNetworksToRule(networkIDs); err != nil {
 			return err
 		}
 
 		klog.V(4).Infof("Assigning new hosts (%v) to load balancer: %v", assign, lb)
-		if err := lb.assignHostsToRule(lb.rule, assign); err != nil {
+		if err := lb.assignHostsToRule(assign); err != nil {
 			return err
 		}
 	}
 
 	if len(remove) > 0 {
 		klog.V(4).Infof("Removing old hosts (%v) from load balancer: %v", assign, lb)
-		if err := lb.removeHostsFromRule(lb.rule, remove); err != nil {
+		if err := lb.removeHostsFromRule(remove); err != nil {
 			return err
 		}
 	}
