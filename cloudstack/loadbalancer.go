@@ -118,7 +118,11 @@ func (lb *loadBalancer) String() string {
 	if lb.service != nil {
 		svcName = fmt.Sprintf("%s/%s", lb.service.Namespace, lb.service.Name)
 	}
-	return fmt.Sprintf("lb(%v, %v, %v, svc(%v))", lb.name, lb.rule, lb.ip, svcName)
+	projID := "nil"
+	if lb.cloud != nil && lb.cloud.projectID != "" {
+		projID = lb.cloud.projectID
+	}
+	return fmt.Sprintf("lb(%v, %v, %v, %v, svc(%v))", lb.name, projID, lb.rule, lb.ip, svcName)
 }
 
 func (lb *loadBalancerRule) String() string {
@@ -1573,6 +1577,8 @@ func nodeNames(nodes []*v1.Node) string {
 	return strings.Join(names, ",")
 }
 
+var rfc6901Encoder = strings.NewReplacer("~", "~0", "/", "~1")
+
 func createJSONPatchForLabel(key, value string) []byte {
 	const format = `[
 		{
@@ -1581,7 +1587,7 @@ func createJSONPatchForLabel(key, value string) []byte {
 			"value": "%s"
 		}
 	]`
-	return []byte(fmt.Sprintf(format, key, value))
+	return []byte(fmt.Sprintf(format, rfc6901Encoder.Replace(key), value))
 }
 
 func serviceToLBPorts(lb *loadBalancer) (lbPorts, error) {

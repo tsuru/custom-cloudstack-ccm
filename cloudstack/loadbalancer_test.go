@@ -33,7 +33,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "n1",
 				Labels: map[string]string{
-					"project-label":     "11111111-2222-3333-4444-555555555555",
+					"my/project-label":  "11111111-2222-3333-4444-555555555555",
 					"environment-label": "env1",
 					"pool-label":        "pool1",
 				},
@@ -100,7 +100,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 	}
 
 	assertSvcWithProject := func(t *testing.T, svc *corev1.Service) {
-		assert.Equal(t, "11111111-2222-3333-4444-555555555555", svc.Labels["project-label"])
+		assert.Equal(t, "11111111-2222-3333-4444-555555555555", svc.Labels["my/project-label"])
 	}
 
 	type consecutiveCall struct {
@@ -527,7 +527,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
 						require.Error(t, err)
-						assert.Contains(t, err.Error(), "error list load balancer pools for lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)): no LB pools found")
+						assert.Contains(t, err.Error(), "error list load balancer pools for lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)): no LB pools found")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -1581,7 +1581,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: baseSvc,
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
+						assert.EqualError(t, err, `should not manage lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
@@ -1801,7 +1801,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						return *svc
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						require.EqualError(t, err, `unable to update load balancer lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)): CloudStack API error 999 (CSExceptionErrorCode: 999): myerror`)
+						require.EqualError(t, err, `unable to update load balancer lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)): CloudStack API error 999 (CSExceptionErrorCode: 999): myerror`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -1856,7 +1856,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: baseSvc,
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
+						assert.EqualError(t, err, `should not manage lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)) - status hostname: "" - missing tags: tag "cloudprovider": expected: "custom-cloudstack", got: "" - tag "kubernetes_service": expected: "svc1", got: ""`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -1956,7 +1956,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: baseSvc,
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						assert.EqualError(t, err, `should not manage lb(svc1.test.com, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)), tag "cloudprovider-ignore" is set`)
+						assert.EqualError(t, err, `should not manage lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)), tag "cloudprovider-ignore" is set`)
 						assert.Nil(t, lbStatus)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n1"}, "projectid": []string{"11111111-2222-3333-4444-555555555555"}}},
@@ -1975,7 +1975,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			csCloud, err := newCSCloud(&CSConfig{
 				Global: globalConfig{
 					EnvironmentLabel:   "environment-label",
-					ProjectIDLabel:     "project-label",
+					ProjectIDLabel:     "my/project-label",
 					NodeFilterLabel:    "pool-label",
 					ServiceFilterLabel: "pool-label",
 				},
@@ -3086,7 +3086,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			existing:     false,
 			needsUpdate:  false,
 			deleteCalled: false,
-			errorMatches: `no port name "http" found for endpoint for lb\(test, lbrule\(, test\), ip\(, \), svc\(kubernetes_namespace/kubernetes_service\)\)`,
+			errorMatches: `no port name "http" found for endpoint for lb\(test, nil, lbrule\(, test\), ip\(, \), svc\(kubernetes_namespace/kubernetes_service\)\)`,
 		},
 		{
 			svcPorts: []corev1.ServicePort{
@@ -3129,7 +3129,7 @@ func TestCheckLoadBalancerRule(t *testing.T) {
 			needsUpdate:  false,
 			deleteError:  true,
 			deleteCalled: true,
-			errorMatches: `error deleting load balancer rule lb\(test, lbrule\(id-1, test\), ip\(, \), svc\(kubernetes_namespace/kubernetes_service\)\): CloudStack API error 0 \(CSExceptionErrorCode: 0\): my delete error`,
+			errorMatches: `error deleting load balancer rule lb\(test, nil, lbrule\(id-1, test\), ip\(, \), svc\(kubernetes_namespace/kubernetes_service\)\): CloudStack API error 0 \(CSExceptionErrorCode: 0\): my delete error`,
 		},
 	}
 
