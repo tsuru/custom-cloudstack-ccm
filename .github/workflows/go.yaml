@@ -44,3 +44,7 @@ jobs:
     - name: push latest to docker
       if: contains(github.ref, 'refs/heads/master')
       run: make push
+    
+    - name: push branch to docker
+      if: startsWith(github.ref, 'refs/heads/')
+      run: make TAG=${GITHUB_REF/refs\/heads\//} push
