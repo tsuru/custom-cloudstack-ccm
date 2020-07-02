@@ -199,7 +199,7 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, err
 	}
 
-	if lb.cloud.projectID != "" && service.Labels[cs.config.Global.ProjectIDLabel] == "" {
+	if lb.cloud.projectID != "" && cs.config.Global.ProjectIDLabel != "" && service.Labels[cs.config.Global.ProjectIDLabel] == "" {
 		service.Labels[cs.config.Global.ProjectIDLabel] = lb.cloud.projectID
 
 		_, err = cs.kubeClient.CoreV1().Services(service.Namespace).Patch(
@@ -391,14 +391,14 @@ func isLBRemovalEnabled(lb *loadBalancer, service *v1.Service) bool {
 
 // getLoadBalancer retrieves the IP address and ID and all the existing rules it can find.
 func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networkIDs []string) (*loadBalancer, error) {
+	environment := cs.environmentForMeta(service.ObjectMeta)
 	if projectID == "" {
-		var ok bool
-		projectID, ok = getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.ProjectIDLabel)
-		if !ok {
-			klog.V(4).Infof("unable to retrieve projectID for service: %#v", service)
+		var err error
+		projectID, err = cs.projectForMeta(service.ObjectMeta, environment)
+		if err != nil {
+			klog.V(4).Infof("unable to retrieve projectID for service: %#v: %v", service, err)
 		}
 	}
-	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
 	lb := &loadBalancer{
 		cloud: &projectCloud{
 			CSCloud:     cs,
@@ -534,11 +534,10 @@ func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, err
 		return nil, nil, "", errors.New("no nodes available to add to load balancer")
 	}
 
-	environmentID, _ := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.config.Global.EnvironmentLabel)
-
-	projectID, ok := getLabelOrAnnotation(nodes[0].ObjectMeta, cs.config.Global.ProjectIDLabel)
-	if !ok {
-		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %#v", nodes[0])
+	environmentID := cs.environmentForMeta(nodes[0].ObjectMeta)
+	projectID, err := cs.projectForMeta(nodes[0].ObjectMeta, environmentID)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %#v: %v", nodes[0], err)
 	}
 
 	var manager *cloudstackManager
@@ -635,7 +634,7 @@ func (cs *CSCloud) getLoadBalancerName(service *v1.Service) string {
 	if suffix != "" {
 		return fmt.Sprintf("%s.%s", service.Name, suffix)
 	}
-	environment, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.EnvironmentLabel)
+	environment := cs.environmentForMeta(service.ObjectMeta)
 	var lbDomain string
 	if env, ok := cs.environments[environment]; ok {
 		lbDomain = env.lbDomain
