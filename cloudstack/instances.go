@@ -295,10 +295,10 @@ func (cs *CSCloud) newNode(kubeNode *v1.Node) (*node, error) {
 	if n, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.config.Global.NodeNameLabel); ok {
 		name = n
 	}
-	environment, _ := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.config.Global.EnvironmentLabel)
-	projectID, ok := getLabelOrAnnotation(kubeNode.ObjectMeta, cs.config.Global.ProjectIDLabel)
-	if !ok {
-		return nil, fmt.Errorf("failed to retrieve projectID from node %#v", kubeNode)
+	environment := cs.environmentForMeta(kubeNode.ObjectMeta)
+	projectID, err := cs.projectForMeta(kubeNode.ObjectMeta, environment)
+	if err != nil {
+		return nil, fmt.Errorf("error processing node %#v: %v", kubeNode, err)
 	}
 	n := &node{
 		projectID:   projectID,
@@ -311,6 +311,29 @@ func (cs *CSCloud) newNode(kubeNode *v1.Node) (*node, error) {
 
 func (cs *CSCloud) clientForNode(n *node) (*cloudstack.CloudStackClient, error) {
 	return cs.clientForEnvironment(n.environment)
+}
+
+func (cs *CSCloud) projectForMeta(meta metav1.ObjectMeta, environment string) (string, error) {
+	projectID, ok := getLabelOrAnnotation(meta, cs.config.Global.ProjectIDLabel)
+	if !ok {
+		if envConfig, ok := cs.config.Environment[environment]; ok {
+			projectID = envConfig.ProjectID
+		}
+		if projectID == "" {
+			return "", errors.New("no projectID found")
+		}
+	}
+	return projectID, nil
+}
+
+func (cs *CSCloud) environmentForMeta(meta metav1.ObjectMeta) string {
+	environment, _ := getLabelOrAnnotation(meta, cs.config.Global.EnvironmentLabel)
+	if environment == "" && len(cs.environments) == 1 {
+		for k := range cs.environments {
+			environment = k
+		}
+	}
+	return environment
 }
 
 func (cs *CSCloud) clientForEnvironment(environment string) (*cloudstack.CloudStackClient, error) {

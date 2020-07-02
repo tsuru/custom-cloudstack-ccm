@@ -64,6 +64,7 @@ type environmentConfig struct {
 	SecretKey       string `gcfg:"secret-key"`
 	LBEnvironmentID string `gcfg:"lb-environment-id"`
 	LBDomain        string `gcfg:"lb-domain"`
+	ProjectID       string `gcfg:"project-id"`
 	SSLNoVerify     bool   `gcfg:"ssl-no-verify"`
 	RemoveLBs       bool   `gcfg:"remove-lbs-on-delete"`
 }
