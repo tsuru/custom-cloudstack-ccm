@@ -1045,6 +1045,7 @@ func (lb *loadBalancer) createLoadBalancerRule() (*loadBalancerRule, error) {
 	p.SetParam("networkid", lb.mainNetworkID)
 	p.SetParam("publicipid", lb.ip.id)
 	p.SetParam("protocol", ports.protocol)
+	p.SetParam("healthchecktype", ports.protocol)
 
 	additionalPorts := ports.additionalPorts()
 	if len(additionalPorts) > 0 {
