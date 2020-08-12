@@ -54,6 +54,7 @@ const (
 
 	CloudstackResourceIPAdress     = "PublicIpAddress"
 	CloudstackResourceLoadBalancer = "LoadBalancer"
+	udp = "udp"
 )
 
 type projectCloud struct {
@@ -1082,6 +1083,7 @@ func (lb *loadBalancer) createLoadBalancerRule() (*loadBalancerRule, error) {
 			Publicip:    r.Publicip,
 			Publicipid:  r.Publicipid,
 			Zoneid:      r.Zoneid,
+			Protocol: 	 r.Protocol,
 		},
 	}
 
@@ -1095,7 +1097,7 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 	}
 
 	_, lbCustomHealthCheckVal := getLabelOrAnnotation(lb.service.ObjectMeta, lbCustomHealthCheck)
-	if !lbCustomHealthCheckVal {
+	if !lbCustomHealthCheckVal && lb.rule.Protocol != strings.ToUpper(udp) {
 		return nil
 	}
 
@@ -1133,6 +1135,13 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 		updateGloboNetworkPoolsParams.SetParam("expectedhealthcheck", pool.HealthCheckExpected)
 		updateGloboNetworkPoolsParams.SetParam("zoneid", lb.rule.Zoneid)
 		updateGloboNetworkPoolsParams.SetParam("maxconn", 0)
+
+		if  pool.HealthCheckType ==  udp {
+			updateGloboNetworkPoolsParams.SetParam("l4protocol", strings.ToUpper(pool.HealthCheckType))
+			updateGloboNetworkPoolsParams.SetParam("l7protocol", "Outros")
+			updateGloboNetworkPoolsParams.SetParam("redeploy", true)
+		}
+
 		err = client.Custom.CustomRequest("updateGloboNetworkPool", &updateGloboNetworkPoolsParams, &r)
 		if err != nil {
 			return fmt.Errorf("error updating globo network pool for %v: %v", lb, err)
@@ -1158,11 +1167,19 @@ func (lb *loadBalancer) generateGloboNetworkPool(portInfo lbPortInfo, service *v
 	protocol := strings.Split(namedService, "-")[0]
 	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
 	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
-	if healthCheckMessage == "" || healthCheckResponse == "" {
+
+	if (healthCheckMessage == "" || healthCheckResponse == "") && protocol != "udp" {
 		return nil
 	}
 
+
 	for _, pool := range globoPools {
+		if (protocol == udp) {
+			pool.HealthCheckType = protocol
+			pool.HealthCheckExpected = udp
+			pool.HealthCheck = udp
+		}
+
 		if (pool.VipPort == vipPort && pool.Port == dstPort) &&
 			(pool.HealthCheck != healthCheckMessage ||
 				pool.HealthCheckExpected != healthCheckResponse ||
