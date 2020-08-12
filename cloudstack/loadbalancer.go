@@ -54,7 +54,7 @@ const (
 
 	CloudstackResourceIPAdress     = "PublicIpAddress"
 	CloudstackResourceLoadBalancer = "LoadBalancer"
-	udp = "udp"
+	udp                            = "udp"
 )
 
 type projectCloud struct {
@@ -1083,7 +1083,7 @@ func (lb *loadBalancer) createLoadBalancerRule() (*loadBalancerRule, error) {
 			Publicip:    r.Publicip,
 			Publicipid:  r.Publicipid,
 			Zoneid:      r.Zoneid,
-			Protocol: 	 r.Protocol,
+			Protocol:    r.Protocol,
 		},
 	}
 
@@ -1136,7 +1136,7 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 		updateGloboNetworkPoolsParams.SetParam("zoneid", lb.rule.Zoneid)
 		updateGloboNetworkPoolsParams.SetParam("maxconn", 0)
 
-		if  pool.HealthCheckType ==  udp {
+		if pool.HealthCheckType == udp {
 			updateGloboNetworkPoolsParams.SetParam("l4protocol", strings.ToUpper(pool.HealthCheckType))
 			updateGloboNetworkPoolsParams.SetParam("l7protocol", "Outros")
 			updateGloboNetworkPoolsParams.SetParam("redeploy", true)
@@ -1168,13 +1168,12 @@ func (lb *loadBalancer) generateGloboNetworkPool(portInfo lbPortInfo, service *v
 	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
 	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
 
-	if (healthCheckMessage == "" || healthCheckResponse == "") && protocol != "udp" {
+	if (healthCheckMessage == "" || healthCheckResponse == "") && protocol != udp {
 		return nil
 	}
 
-
 	for _, pool := range globoPools {
-		if (protocol == udp) {
+		if protocol == udp {
 			pool.HealthCheckType = protocol
 			pool.HealthCheckExpected = udp
 			pool.HealthCheck = udp
