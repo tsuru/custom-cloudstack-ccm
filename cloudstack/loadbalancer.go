@@ -962,7 +962,7 @@ func comparePorts(ports lbPorts, lb *loadBalancer) bool {
 	return reflect.DeepEqual(ports.additionalPorts(), rule.AdditionalPortMap) &&
 		rule.Privateport == strconv.Itoa(ports.privatePort()) &&
 		rule.Publicport == strconv.Itoa(ports.publicPort()) &&
-		rule.Protocol == ports.protocol
+		rule.Protocol == string(ports.protocol)
 }
 
 type checkLBResult struct {
@@ -1045,7 +1045,7 @@ func (lb *loadBalancer) createLoadBalancerRule() (*loadBalancerRule, error) {
 	p.SetParam("publicport", ports.publicPort())
 	p.SetParam("networkid", lb.mainNetworkID)
 	p.SetParam("publicipid", lb.ip.id)
-	p.SetParam("protocol", ports.protocol)
+	p.SetParam("protocol", string(ports.protocol))
 
 	additionalPorts := ports.additionalPorts()
 	if len(additionalPorts) > 0 {
@@ -1097,7 +1097,7 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 	}
 
 	_, lbCustomHealthCheckVal := getLabelOrAnnotation(lb.service.ObjectMeta, lbCustomHealthCheck)
-	if !lbCustomHealthCheckVal && lb.rule.Protocol != strings.ToUpper(udp) {
+	if !lbCustomHealthCheckVal && lb.rule.Protocol != string(v1.ProtocolUDP) {
 		return nil
 	}
 
@@ -1124,7 +1124,7 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 	updateGloboNetworkPoolsParams := cloudstack.CustomServiceParams{}
 	r := UpdateGloboNetworkPoolResponse{}
 	for _, portInfo := range ports.ports {
-		pool := lb.generateGloboNetworkPool(portInfo, lb.service, listGloboNetworkPoolsResponse.GloboNetworkPools)
+		pool := lb.generateGloboNetworkPool(ports, portInfo, lb.service, listGloboNetworkPoolsResponse.GloboNetworkPools)
 		if pool == nil {
 			continue
 		}
@@ -1156,36 +1156,33 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 	return nil
 }
 
-func (lb *loadBalancer) generateGloboNetworkPool(portInfo lbPortInfo, service *v1.Service, globoPools []*globoNetworkPool) *globoNetworkPool {
-	if portInfo.name == "" {
-		return nil
-	}
-
+func (lb *loadBalancer) generateGloboNetworkPool(ports lbPorts, portInfo lbPortInfo, service *v1.Service, globoPools []*globoNetworkPool) *globoNetworkPool {
 	dstPort := int(portInfo.privatePort)
 	vipPort := int(portInfo.publicPort)
 	namedService := portInfo.name
-	protocol := strings.Split(namedService, "-")[0]
+	l7Protocol := strings.Split(namedService, "-")[0]
 	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
 	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
 
-	if (healthCheckMessage == "" || healthCheckResponse == "") && protocol != udp {
+	if (healthCheckMessage == "" || healthCheckResponse == "") && ports.protocol != v1.ProtocolUDP {
 		return nil
 	}
 
 	for _, pool := range globoPools {
-		if protocol == udp {
-			pool.HealthCheckType = protocol
+		if ports.protocol == v1.ProtocolUDP {
+			pool.HealthCheckType = udp
 			pool.HealthCheckExpected = udp
 			pool.HealthCheck = udp
+			return pool
 		}
 
 		if (pool.VipPort == vipPort && pool.Port == dstPort) &&
 			(pool.HealthCheck != healthCheckMessage ||
 				pool.HealthCheckExpected != healthCheckResponse ||
-				pool.HealthCheckType != protocol) {
+				pool.HealthCheckType != l7Protocol) {
 			pool.HealthCheck = healthCheckMessage
 			pool.HealthCheckExpected = healthCheckResponse
-			pool.HealthCheckType = protocol
+			pool.HealthCheckType = l7Protocol
 			return pool
 		}
 	}
@@ -1612,14 +1609,9 @@ func serviceToLBPorts(lb *loadBalancer) (lbPorts, error) {
 	}
 	sortPorts(ports)
 
-	var protocol string
-	switch ports[0].Protocol {
-	case v1.ProtocolTCP, "":
-		protocol = "TCP"
-	case v1.ProtocolUDP:
-		protocol = "UDP"
-	default:
-		return lbPorts{}, fmt.Errorf("unsupported load balancer protocol: %v", ports[0].Protocol)
+	protocol := ports[0].Protocol
+	if protocol != v1.ProtocolTCP && protocol != v1.ProtocolUDP {
+		return lbPorts{}, fmt.Errorf("unsupported load balancer protocol: %v", protocol)
 	}
 
 	result := lbPorts{
@@ -1659,7 +1651,7 @@ type lbPortInfo struct {
 
 type lbPorts struct {
 	ports    []lbPortInfo
-	protocol string
+	protocol v1.Protocol
 }
 
 func (p *lbPorts) publicPort() int {
