@@ -54,7 +54,6 @@ const (
 
 	CloudstackResourceIPAdress     = "PublicIpAddress"
 	CloudstackResourceLoadBalancer = "LoadBalancer"
-	udp                            = "udp"
 )
 
 type projectCloud struct {
@@ -1136,7 +1135,7 @@ func (lb *loadBalancer) updateLoadBalancerPool() error {
 		updateGloboNetworkPoolsParams.SetParam("zoneid", lb.rule.Zoneid)
 		updateGloboNetworkPoolsParams.SetParam("maxconn", 0)
 
-		if pool.HealthCheckType == udp {
+		if pool.HealthCheckType == string(v1.ProtocolUDP) {
 			updateGloboNetworkPoolsParams.SetParam("l4protocol", strings.ToUpper(pool.HealthCheckType))
 			updateGloboNetworkPoolsParams.SetParam("l7protocol", "Outros")
 			updateGloboNetworkPoolsParams.SetParam("redeploy", true)
@@ -1175,7 +1174,7 @@ func (lb *loadBalancer) generateGloboNetworkPool(ports lbPorts, portInfo lbPortI
 		}
 
 		if ports.protocol == v1.ProtocolUDP {
-			pool.HealthCheckType = udp
+			pool.HealthCheckType = string(v1.ProtocolUDP)
 			pool.HealthCheckExpected = ""
 			pool.HealthCheck = ""
 			return pool
