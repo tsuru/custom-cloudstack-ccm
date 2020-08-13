@@ -2010,7 +2010,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
 							{Command: "queryAsyncJobResult"},
 							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
-							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"0"}, "healthchecktype": []string{"UDP"}, "healthcheck": []string{"udp"}, "expectedhealthcheck": []string{"udp"}, "l4protocol": []string{"UDP"}, "l7protocol": []string{"Outros"}, "redeploy": []string{"true"}}},
+							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"0"}, "healthchecktype": []string{"UDP"}, "healthcheck": []string{""}, "expectedhealthcheck": []string{""}, "l4protocol": []string{"UDP"}, "l7protocol": []string{"Outros"}, "redeploy": []string{"true"}}},
 							{Command: "queryAsyncJobResult"},
 						})
 					},

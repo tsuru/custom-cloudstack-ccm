@@ -1169,17 +1169,21 @@ func (lb *loadBalancer) generateGloboNetworkPool(ports lbPorts, portInfo lbPortI
 	}
 
 	for _, pool := range globoPools {
+		isPortPool := pool.VipPort == vipPort && pool.Port == dstPort
+		if !isPortPool {
+			continue
+		}
+
 		if ports.protocol == v1.ProtocolUDP {
 			pool.HealthCheckType = udp
-			pool.HealthCheckExpected = udp
-			pool.HealthCheck = udp
+			pool.HealthCheckExpected = ""
+			pool.HealthCheck = ""
 			return pool
 		}
 
-		if (pool.VipPort == vipPort && pool.Port == dstPort) &&
-			(pool.HealthCheck != healthCheckMessage ||
-				pool.HealthCheckExpected != healthCheckResponse ||
-				pool.HealthCheckType != l7Protocol) {
+		if pool.HealthCheck != healthCheckMessage ||
+			pool.HealthCheckExpected != healthCheckResponse ||
+			pool.HealthCheckType != l7Protocol {
 			pool.HealthCheck = healthCheckMessage
 			pool.HealthCheckExpected = healthCheckResponse
 			pool.HealthCheckType = l7Protocol
