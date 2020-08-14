@@ -1635,6 +1635,9 @@ func serviceToLBPorts(lb *loadBalancer) (lbPorts, error) {
 
 	_, useTargetPort := getLabelOrAnnotation(lb.service.ObjectMeta, lbUseTargetPort)
 	for _, p := range ports {
+		if p.Protocol != protocol {
+			return lbPorts{}, fmt.Errorf("unsupported load balancer with multiple protocols: %q and %q", protocol, p.Protocol)
+		}
 		targetPort := int(p.NodePort)
 		if useTargetPort {
 			var err error
