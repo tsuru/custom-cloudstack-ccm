@@ -2112,6 +2112,22 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "mixed ports tcp and udp",
+			calls: []consecutiveCall{
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Spec.Ports = []corev1.ServicePort{{Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolUDP}}
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
+						require.EqualError(t, err, `unsupported load balancer with multiple protocols: "TCP" and "UDP"`)
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
