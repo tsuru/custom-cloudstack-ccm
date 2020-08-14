@@ -1159,11 +1159,11 @@ func (lb *loadBalancer) generateGloboNetworkPool(ports lbPorts, portInfo lbPortI
 	dstPort := int(portInfo.privatePort)
 	vipPort := int(portInfo.publicPort)
 	namedService := portInfo.name
-	l7Protocol := strings.Split(namedService, "-")[0]
+	hcProtocol := portToHCProtocol(ports, portInfo)
 	healthCheckResponse, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckResponsePrefix, namedService))
 	healthCheckMessage, _ := getLabelOrAnnotation(service.ObjectMeta, fmt.Sprintf("%s%s", lbCustomHealthCheckMessagePrefix, namedService))
 
-	if (healthCheckMessage == "" || healthCheckResponse == "") && ports.protocol != v1.ProtocolUDP {
+	if hcProtocol.requiresMsg && healthCheckMessage == "" {
 		return nil
 	}
 
@@ -1173,23 +1173,35 @@ func (lb *loadBalancer) generateGloboNetworkPool(ports lbPorts, portInfo lbPortI
 			continue
 		}
 
-		if ports.protocol == v1.ProtocolUDP {
-			pool.HealthCheckType = string(v1.ProtocolUDP)
-			pool.HealthCheckExpected = ""
-			pool.HealthCheck = ""
-			return pool
-		}
-
 		if pool.HealthCheck != healthCheckMessage ||
 			pool.HealthCheckExpected != healthCheckResponse ||
-			pool.HealthCheckType != l7Protocol {
+			pool.HealthCheckType != hcProtocol.protocol {
 			pool.HealthCheck = healthCheckMessage
 			pool.HealthCheckExpected = healthCheckResponse
-			pool.HealthCheckType = l7Protocol
+			pool.HealthCheckType = hcProtocol.protocol
 			return pool
 		}
 	}
 	return nil
+}
+
+type hcPortInfo struct {
+	protocol    string
+	requiresMsg bool
+}
+
+func portToHCProtocol(ports lbPorts, portInfo lbPortInfo) hcPortInfo {
+	supportedHCProtocols := map[string]bool{
+		"HTTP":  true,
+		"HTTPS": true,
+		"TCP":   false,
+		"UDP":   false,
+	}
+	svcNamePrefix := strings.ToUpper(strings.Split(portInfo.name, "-")[0])
+	if hasMsg, ok := supportedHCProtocols[svcNamePrefix]; ok {
+		return hcPortInfo{protocol: svcNamePrefix, requiresMsg: hasMsg}
+	}
+	return hcPortInfo{protocol: string(ports.protocol), requiresMsg: false}
 }
 
 // deleteLoadBalancerRule deletes a load balancer rule.

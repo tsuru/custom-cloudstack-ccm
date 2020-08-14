@@ -851,8 +851,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-http-foo"] = "200 OK"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-msg-https-bar"] = "GET /test HTTP/1.0"
 						svc.Annotations["csccm.cloudprovider.io/loadbalancer-custom-healthcheck-rsp-https-bar"] = "bleh"
-						svc.Spec.Ports = []corev1.ServicePort{{Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
-							{Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
+						svc.Spec.Ports = []corev1.ServicePort{{Name: "http-foo", Port: 8080, NodePort: 30001, Protocol: corev1.ProtocolTCP},
+							{Name: "https-bar", Port: 8443, NodePort: 30002, Protocol: corev1.ProtocolTCP}}
 						return *svc
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
@@ -2012,6 +2012,26 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
 							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"0"}, "healthchecktype": []string{"UDP"}, "healthcheck": []string{""}, "expectedhealthcheck": []string{""}, "l4protocol": []string{"UDP"}, "l7protocol": []string{"Outros"}, "redeploy": []string{"true"}}},
 							{Command: "queryAsyncJobResult"},
+						})
+					},
+				},
+				{
+					svc: (func() corev1.Service {
+						svc := baseSvc.DeepCopy()
+						svc.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+						return *svc
+					})(),
+					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
+						require.NoError(t, err)
+						assert.Equal(t, lbStatus, &corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{IP: "10.0.0.1", Hostname: "svc1.test.com"},
+							},
+						})
+						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
 						})
 					},
 				},
