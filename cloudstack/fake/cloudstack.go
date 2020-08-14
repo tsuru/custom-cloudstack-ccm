@@ -123,16 +123,20 @@ func (s *CloudstackServer) createDefaultLBPools(lbId string) {
 	lbRule := s.lbRules[lbName]
 	publicPort, _ := strconv.Atoi(lbRule.Rule["publicport"].(string))
 	privatePort, _ := strconv.Atoi(lbRule.Rule["privateport"].(string))
-	protocol := lbRule.Rule["protocol"].(string)
 	createDefaultLBPool := lbRule.createLBPool
-	if len(lbRule.Pools) > 1 || !createDefaultLBPool {
+	if !createDefaultLBPool {
 		return
+	}
+	for _, pool := range lbRule.Pools {
+		if pool.Port == privatePort && pool.VipPort == publicPort {
+			return
+		}
 	}
 	lbRule.Pools = append(lbRule.Pools, globoNetworkPool{
 		Id:              0,
 		VipPort:         publicPort,
 		Port:            privatePort,
-		HealthCheckType: protocol,
+		HealthCheckType: "TCP",
 	})
 	additionalPortMap, ok := lbRule.Rule["additionalportmap"].([]string)
 	if !ok {
@@ -148,7 +152,7 @@ func (s *CloudstackServer) createDefaultLBPools(lbId string) {
 			Id:              idx + 1,
 			VipPort:         additionalPublicPort,
 			Port:            additionalPrivatePort,
-			HealthCheckType: protocol,
+			HealthCheckType: "TCP",
 		})
 	}
 }
