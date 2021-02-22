@@ -296,33 +296,10 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 	}
 
 	klog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
-	cs.svcLock.Lock(service)
-	defer cs.svcLock.Unlock(service)
 
-	nodes = cs.filterNodesMatchingLabels(nodes, service)
+	cs.updateLBQueue.Upsert(service, nodes)
 
-	hostIDs, networkIDs, projectID, err := cs.extractIDs(nodes)
-	if err != nil {
-		return err
-	}
-
-	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(service, projectID, networkIDs)
-	if err != nil {
-		return err
-	}
-
-	if lb.rule == nil {
-		return nil
-	}
-
-	err = shouldManageLB(lb)
-	if err != nil {
-		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s: %v", service.Namespace, service.Name, err)
-		return nil
-	}
-
-	return lb.syncNodes(hostIDs, networkIDs)
+	return nil
 }
 
 // EnsureLoadBalancerDeleted deletes the specified load balancer if it exists, returning

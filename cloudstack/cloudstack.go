@@ -17,6 +17,7 @@ limitations under the License.
 package cloudstack
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -28,7 +29,11 @@ import (
 
 	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	"gopkg.in/gcfg.v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcore "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/transport"
 	cloudprovider "k8s.io/cloud-provider"
 )
@@ -56,6 +61,7 @@ type globalConfig struct {
 	EnvironmentLabel   string `gcfg:"environment-label"`
 	InternalIPIndex    int    `gcfg:"internal-ip-index"`
 	ExternalIPIndex    int    `gcfg:"external-ip-index"`
+	UpdateLBWorkers    int    `gcfg:"update-lb-workers"`
 }
 
 type environmentConfig struct {
@@ -107,9 +113,11 @@ type CSEnvironment struct {
 
 // CSCloud is an implementation of Interface for CloudStack.
 type CSCloud struct {
-	environments map[string]CSEnvironment
-	kubeClient   kubernetes.Interface
-	config       CSConfig
+	environments  map[string]CSEnvironment
+	kubeClient    kubernetes.Interface
+	recorder      record.EventRecorder
+	updateLBQueue *serviceNodeQueue
+	config        CSConfig
 
 	// Lock used to prevent parallel calls to UpdateLoadBalancer and
 	// EnsureLoadBalancer. See kubernetes/kubernetes#53462 (closed but not
@@ -205,6 +213,16 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 // Initialize passes a Kubernetes clientBuilder interface to the cloud provider
 func (cs *CSCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct{}) {
 	cs.kubeClient = clientBuilder.ClientOrDie(ProviderName)
+	b := record.NewBroadcaster()
+	b.StartRecordingToSink(&typedcore.EventSinkImpl{Interface: typedcore.New(cs.kubeClient.CoreV1().RESTClient()).Events("")})
+	cs.recorder = b.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "csccm"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-stop
+		cancel()
+	}()
+	cs.updateLBQueue = cs.startLBUpdateQueue(ctx)
 }
 
 // LoadBalancer returns an implementation of LoadBalancer for CloudStack.

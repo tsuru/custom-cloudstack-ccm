@@ -538,6 +538,7 @@ k8s.io/component-base v0.0.0-20191016111234-b8c37ee0c266/go.mod h1:zT8T6A3K4wLlb
 k8s.io/cri-api v0.0.0-20190817025403-3ae76f584e79/go.mod h1:MQf3sTYxPlSVy4QhUrDFfHWFxHtwhdpvGBECKGhZULk=
 k8s.io/csi-translation-lib v0.0.0-20191016115443-72c16c0ea390/go.mod h1:0K9sZACh8VfA/3CUERb7P3g09UU+zRplb1Fh6Kx+ngc=
 k8s.io/gengo v0.0.0-20190116091435-f8a0810f38af/go.mod h1:ezvh/TsK7cY6rbqRK0oQQ8IAqLxYwwyPxAX1Pzy0ii0=
+k8s.io/heapster v1.2.0-beta.1 h1:lUsE/AHOMHpi3MLlBEkaU8Esxm5QhdyCrv1o7ot0s84=
 k8s.io/heapster v1.2.0-beta.1/go.mod h1:h1uhptVXMwC8xtZBYsPXKVi8fpdlYkTs6k949KozGrM=
 k8s.io/klog v0.3.1/go.mod h1:Gq+BEi5rUBO/HRz0bTSXDUcqjScdoY3a9IHpCEIOOfk=
 k8s.io/klog v1.0.0 h1:Pt+yjF5aB1xDSVbau4VsWe+dQNzA0qv1LlXdC2dF6Q8=
