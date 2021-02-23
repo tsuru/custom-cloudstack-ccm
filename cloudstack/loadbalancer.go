@@ -186,9 +186,12 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, fmt.Errorf("requested load balancer with no ports")
 	}
 
-	nodes = cs.filterNodesMatchingLabels(nodes, service)
+	err := cs.nodeRegistry.updateNodes(nodes)
+	if err != nil {
+		return nil, err
+	}
 
-	hostIDs, networkIDs, projectID, err := cs.extractIDs(nodes)
+	hostIDs, networkIDs, projectID, err := cs.nodeRegistry.idsForService(service)
 	if err != nil {
 		return nil, err
 	}
@@ -297,9 +300,12 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 
 	klog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
 
-	cs.updateLBQueue.Upsert(service, nodes)
+	err := cs.nodeRegistry.updateNodes(nodes)
+	if err != nil {
+		return err
+	}
 
-	return nil
+	return cs.updateLBQueue.upsert(service)
 }
 
 // EnsureLoadBalancerDeleted deletes the specified load balancer if it exists, returning
@@ -505,62 +511,6 @@ func getLoadBalancerByTags(client *cloudstack.CloudStackClient, service *v1.Serv
 	return lbResult, nil
 }
 
-// extractIDs extracts the VM ID for each node, their unique network IDs and project ID
-func (cs *CSCloud) extractIDs(nodes []*v1.Node) ([]string, []string, string, error) {
-	if len(nodes) == 0 {
-		return nil, nil, "", errors.New("no nodes available to add to load balancer")
-	}
-
-	environmentID := cs.environmentForMeta(nodes[0].ObjectMeta)
-	projectID, err := cs.projectForMeta(nodes[0].ObjectMeta, environmentID)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("unable to retrieve projectID for node %#v: %v", nodes[0], err)
-	}
-
-	var manager *cloudstackManager
-	if env, ok := cs.environments[environmentID]; ok {
-		manager = env.manager
-	}
-	if manager == nil {
-		return nil, nil, "", fmt.Errorf("unable to retrieve cloudstack manager for environment %q", environmentID)
-	}
-
-	var hostIDs []string
-	var networkIDs []string
-	networkMap := make(map[string]struct{})
-
-	for _, node := range nodes {
-		hostName := node.Name
-		if name, ok := getLabelOrAnnotation(node.ObjectMeta, cs.config.Global.NodeNameLabel); ok {
-			hostName = name
-		}
-
-		vm, err := manager.virtualMachineByName(hostName, projectID)
-		if err != nil && err != ErrVMNotFound {
-			return nil, nil, "", err
-		}
-
-		if vm != nil {
-			hostIDs = append(hostIDs, vm.Id)
-			nic, err := cs.externalNIC(vm)
-			if err != nil {
-				return nil, nil, "", err
-			}
-			if _, ok := networkMap[nic.Networkid]; ok {
-				continue
-			}
-			networkMap[nic.Networkid] = struct{}{}
-			networkIDs = append(networkIDs, nic.Networkid)
-		}
-	}
-
-	if len(hostIDs) == 0 || len(networkIDs) == 0 {
-		return nil, nil, "", fmt.Errorf("unable to map kubernetes nodes to cloudstack instances for nodes: %v", nodeNames(nodes))
-	}
-
-	return hostIDs, networkIDs, projectID, nil
-}
-
 func (cs *CSCloud) externalNIC(instance *cloudstack.VirtualMachine) (*cloudstack.Nic, error) {
 	if len(instance.Nic) == 0 {
 		return nil, errors.New("instance does not have any nics")
@@ -571,23 +521,6 @@ func (cs *CSCloud) externalNIC(instance *cloudstack.VirtualMachine) (*cloudstack
 		return &instance.Nic[externalIndex], nil
 	}
 	return &instance.Nic[0], nil
-}
-
-func (cs *CSCloud) filterNodesMatchingLabels(nodes []*v1.Node, service *v1.Service) []*v1.Node {
-	if cs.config.Global.ServiceFilterLabel == "" || cs.config.Global.NodeFilterLabel == "" {
-		return nodes
-	}
-	labelValue, _ := getLabelOrAnnotation(service.ObjectMeta, cs.config.Global.ServiceFilterLabel)
-
-	var filteredNodes []*v1.Node
-	for i := range nodes {
-		nodeLabelValue, _ := getLabelOrAnnotation(nodes[i].ObjectMeta, cs.config.Global.NodeFilterLabel)
-		if nodeLabelValue != labelValue {
-			continue
-		}
-		filteredNodes = append(filteredNodes, nodes[i])
-	}
-	return filteredNodes
 }
 
 // GetLoadBalancerName returns the name of the load balancer responsible for

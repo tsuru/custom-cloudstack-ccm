@@ -30,6 +30,7 @@ import (
 	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	"gopkg.in/gcfg.v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcore "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -43,6 +44,8 @@ const ProviderName = "custom-cloudstack"
 
 var (
 	asyncJobWaitTimeout = int64((5 * time.Minute).Seconds())
+
+	_ cloudprovider.InformerUser = &CSCloud{}
 )
 
 // CSConfig wraps the config for the CloudStack cloud provider.
@@ -117,6 +120,7 @@ type CSCloud struct {
 	kubeClient    kubernetes.Interface
 	recorder      record.EventRecorder
 	updateLBQueue *serviceNodeQueue
+	nodeRegistry  *nodeRegistry
 	config        CSConfig
 
 	// Lock used to prevent parallel calls to UpdateLoadBalancer and
@@ -170,6 +174,8 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 		svcLock:      &serviceLock{},
 		config:       *cfg,
 	}
+	cs.nodeRegistry = newNodeRegistry(cs)
+	cs.updateLBQueue = newServiceNodeQueue(cs)
 
 	for k, v := range cfg.Environment {
 		if v.APIURL == "" || v.APIKey == "" || v.SecretKey == "" {
@@ -222,7 +228,12 @@ func (cs *CSCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilde
 		<-stop
 		cancel()
 	}()
-	cs.updateLBQueue = cs.startLBUpdateQueue(ctx)
+	cs.updateLBQueue.start(ctx)
+}
+
+func (cs *CSCloud) SetInformers(informerFactory informers.SharedInformerFactory) {
+	endpointsInformer := informerFactory.Core().V1().Endpoints()
+	endpointsInformer.Informer().AddEventHandler(cs.nodeRegistry.handleEndpoints())
 }
 
 // LoadBalancer returns an implementation of LoadBalancer for CloudStack.
