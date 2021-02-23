@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +24,17 @@ import (
 func init() {
 	flag.Set("v", "10")
 	flag.Set("logtostderr", "true")
+}
+
+func newTestCSCloud(t *testing.T, cfg *CSConfig, kubeClient *kubeFake.Clientset) *CSCloud {
+	csCloud, err := newCSCloud(cfg)
+	require.Nil(t, err)
+	if kubeClient != nil {
+		csCloud.kubeClient = kubeClient
+	} else {
+		csCloud.kubeClient = kubeFake.NewSimpleClientset()
+	}
+	return csCloud
 }
 
 func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
@@ -253,6 +263,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							},
 						})
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
+							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n2"}}},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
@@ -278,7 +289,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						}
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						assert.EqualError(t, err, `no nodes available to add to load balancer`)
+						assert.EqualError(t, err, `no nodes available to add to service myns/svc1`)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{})
 					},
 				},
@@ -2134,7 +2145,7 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := cloudstackFake.NewCloudstackServer()
 			defer srv.Close()
-			csCloud, err := newCSCloud(&CSConfig{
+			csCloud := newTestCSCloud(t, &CSConfig{
 				Global: globalConfig{
 					EnvironmentLabel:   "environment-label",
 					ProjectIDLabel:     "my/project-label",
@@ -2153,16 +2164,11 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						LBDomain:        "test.com",
 					},
 				},
-			})
-			require.Nil(t, err)
+			}, tt.prepend)
 			if tt.hook != nil {
 				tt.hook(t, srv)
 			}
-			if tt.prepend != nil {
-				csCloud.kubeClient = tt.prepend
-			} else {
-				csCloud.kubeClient = kubeFake.NewSimpleClientset()
-			}
+			var err error
 			var persistentLBStatus *corev1.LoadBalancerStatus
 			for i, cc := range tt.calls {
 				t.Logf("call %d", i)
@@ -2302,7 +2308,7 @@ func Test_CSCloud_GetLoadBalancer(t *testing.T) {
 			if tt.hook != nil {
 				tt.hook(t, srv)
 			}
-			csCloud, err := newCSCloud(&CSConfig{
+			csCloud := newTestCSCloud(t, &CSConfig{
 				Global: globalConfig{
 					EnvironmentLabel:   "environment-label",
 					ProjectIDLabel:     "project-label",
@@ -2321,9 +2327,8 @@ func Test_CSCloud_GetLoadBalancer(t *testing.T) {
 						LBDomain:        "test.com",
 					},
 				},
-			})
-			require.NoError(t, err)
-			csCloud.kubeClient = kubeFake.NewSimpleClientset()
+			}, nil)
+			var err error
 			if tt.ensureNodes != nil {
 				_, err = csCloud.kubeClient.CoreV1().Services(tt.svc.Namespace).Create(&tt.svc)
 				assert.NoError(t, err)
@@ -2412,7 +2417,6 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, err error) {
 						require.NoError(t, err)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
-							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n1"}}},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
@@ -2453,7 +2457,6 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, err error) {
 						require.NoError(t, err)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
-							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n1"}}},
 							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n2"}}},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
@@ -2487,7 +2490,7 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, err error) {
 						require.NoError(t, err)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
-							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n1"}}},
+							{Command: "listVirtualMachines", Params: url.Values{"name": []string{"n2"}}},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
 							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
@@ -2510,7 +2513,7 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 						}
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, err error) {
-						assert.EqualError(t, err, `no nodes available to add to load balancer`)
+						assert.EqualError(t, err, `no nodes available to add to service myns/svc1`)
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{})
 					},
 				},
@@ -2576,7 +2579,7 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := cloudstackFake.NewCloudstackServer()
 			defer srv.Close()
-			csCloud, err := newCSCloud(&CSConfig{
+			csCloud := newTestCSCloud(t, &CSConfig{
 				Global: globalConfig{
 					EnvironmentLabel:   "environment-label",
 					ProjectIDLabel:     "project-label",
@@ -2595,16 +2598,11 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 						LBDomain:        "test.com",
 					},
 				},
-			})
-			require.Nil(t, err)
+			}, tt.prepend)
 			if tt.hook != nil {
 				tt.hook(t, srv)
 			}
-			if tt.prepend != nil {
-				csCloud.kubeClient = tt.prepend
-			} else {
-				csCloud.kubeClient = kubeFake.NewSimpleClientset()
-			}
+			var err error
 			var lbStatus *corev1.LoadBalancerStatus
 			if tt.ensureCall != nil {
 				_, err = csCloud.kubeClient.CoreV1().Services(tt.ensureCall.svc.Namespace).Create(&tt.ensureCall.svc)
@@ -2618,12 +2616,17 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			for i, cc := range tt.calls {
+				csCloud.updateLBQueue.start(context.Background())
+
 				t.Logf("call %d", i)
 				svc := cc.svc.DeepCopy()
 				if err == nil && lbStatus != nil {
 					svc.Status.LoadBalancer = *lbStatus
 				}
 				err = csCloud.UpdateLoadBalancer(context.Background(), "kubernetes", svc, cc.nodes)
+
+				csCloud.updateLBQueue.stopWait()
+
 				if cc.assert != nil {
 					cc.assert(t, srv, err)
 				}
@@ -2912,7 +2915,7 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(srv)
 			}
-			csCloud, err := newCSCloud(&CSConfig{
+			csCloud := newTestCSCloud(t, &CSConfig{
 				Global: globalConfig{
 					EnvironmentLabel: "environment-label",
 					ProjectIDLabel:   "project-label",
@@ -2934,53 +2937,9 @@ func Test_CSCloud_EnsureLoadBalancerDeleted(t *testing.T) {
 						RemoveLBs:       true,
 					},
 				},
-			})
-			require.Nil(t, err)
-			err = csCloud.EnsureLoadBalancerDeleted(context.Background(), "cluster1", tt.svc)
+			}, nil)
+			err := csCloud.EnsureLoadBalancerDeleted(context.Background(), "cluster1", tt.svc)
 			tt.assert(t, err, srv)
-		})
-	}
-}
-
-func TestFilterNodesMatchingLabels(t *testing.T) {
-	nodes := []*corev1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool1"}}},
-		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool2"}}},
-		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pool": "pool2"}}},
-		{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{}}},
-	}
-	s1 := corev1.Service{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app-pool": "pool1"}}}
-	s2 := corev1.Service{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app-pool": "pool2"}}}
-	tt := []struct {
-		name          string
-		cs            CSCloud
-		service       corev1.Service
-		expectedNodes []*corev1.Node
-	}{
-		{"matchSingle", CSCloud{
-			config: CSConfig{
-				Global: globalConfig{
-					ServiceFilterLabel: "app-pool",
-					NodeFilterLabel:    "pool",
-				},
-			},
-		}, s1, nodes[0:1]},
-		{"emptyLabels", CSCloud{}, s1, nodes},
-		{"matchMultiple", CSCloud{
-			config: CSConfig{
-				Global: globalConfig{
-					ServiceFilterLabel: "app-pool",
-					NodeFilterLabel:    "pool",
-				},
-			},
-		}, s2, nodes[1:3]},
-	}
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			filtered := tc.cs.filterNodesMatchingLabels(nodes, &tc.service)
-			if !reflect.DeepEqual(filtered, tc.expectedNodes) {
-				t.Errorf("Expected %+v. Got %+v.", tc.expectedNodes, filtered)
-			}
 		})
 	}
 }
