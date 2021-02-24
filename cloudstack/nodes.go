@@ -33,6 +33,7 @@ type nodeRegistry struct {
 func newNodeRegistry(cs *CSCloud) *nodeRegistry {
 	return &nodeRegistry{
 		nodes:    map[string]*nodeInfo{},
+		svcNodes: map[serviceKey]sets.String{},
 		cs:       cs,
 		revision: 0,
 	}
@@ -49,7 +50,9 @@ func (r *nodeRegistry) nodesContainingService(svcKey serviceKey) []nodeInfo {
 	svcNodes := r.svcNodes[svcKey]
 	for nodeName := range svcNodes {
 		node := r.nodes[nodeName]
-		nodes = append(nodes, *node)
+		if node != nil {
+			nodes = append(nodes, *node)
+		}
 	}
 
 	return nodes
@@ -113,6 +116,10 @@ func (r *nodeRegistry) handleEndpoints() cache.ResourceEventHandler {
 func (r *nodeRegistry) nodesForService(svc *v1.Service) ([]nodeInfo, error) {
 	r.nodesMu.RLock()
 	defer r.nodesMu.RUnlock()
+
+	if svc == nil {
+		return nil, errors.New("service cannot be nil")
+	}
 
 	var nodes []nodeInfo
 
@@ -221,7 +228,7 @@ func (n *nodeInfo) updateLabels(cs *CSCloud, node *v1.Node) error {
 	var err error
 	n.projectID, err = cs.projectForMeta(node.ObjectMeta, n.environmentID)
 	if err != nil {
-		return fmt.Errorf("unable to retrieve projectID for node %#v: %v", node, err)
+		return fmt.Errorf("unable to retrieve projectID for node %q in environment %q: %v", node.Name, n.environmentID, err)
 	}
 
 	n.hostName = node.Name
