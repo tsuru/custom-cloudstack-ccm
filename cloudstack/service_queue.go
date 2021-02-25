@@ -2,13 +2,13 @@ package cloudstack
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 )
 
@@ -53,9 +53,13 @@ type serviceNodeQueue struct {
 }
 
 type queueEntry struct {
-	service *v1.Service
-	nodes   []nodeInfo
+	service *corev1.Service
 	start   time.Time
+}
+
+type queueEntryWithNodeRecent struct {
+	queueEntry
+	topRevision uint64
 }
 
 func newServiceNodeQueue(cs *CSCloud) *serviceNodeQueue {
@@ -65,11 +69,22 @@ func newServiceNodeQueue(cs *CSCloud) *serviceNodeQueue {
 	}
 }
 
-func (q *serviceNodeQueue) upsert(service *v1.Service) error {
+func (q *serviceNodeQueue) upsert(service *corev1.Service) error {
 	q.Lock()
 	defer q.Unlock()
 
-	nodes, err := q.cs.nodeRegistry.nodesForService(service)
+	key := serviceKey{
+		namespace: service.Namespace,
+		name:      service.Name,
+	}
+
+	if _, ok := q.queue[key]; ok {
+		return nil
+	}
+
+	// Simply validate that there are nodes available, we'll fetch them
+	// directly from the registry when running the task.
+	_, err := q.cs.nodeRegistry.nodesForService(service)
 	if err != nil {
 		return err
 	}
@@ -78,14 +93,8 @@ func (q *serviceNodeQueue) upsert(service *v1.Service) error {
 		q.queue = map[serviceKey]queueEntry{}
 	}
 
-	key := serviceKey{
-		namespace: service.Namespace,
-		name:      service.Name,
-	}
-
 	q.queue[key] = queueEntry{
 		service: service,
-		nodes:   nodes,
 		start:   time.Now(),
 	}
 
@@ -96,29 +105,36 @@ func (q *serviceNodeQueue) pop() (queueEntry, bool, error) {
 	q.Lock()
 	defer q.Unlock()
 
-	topRevision := uint64(0)
-	var topSvcKey, emptySvcKey serviceKey
+	var extendEntries []queueEntryWithNodeRecent
 
-	for svcKey := range q.queue {
+	for svcKey, entry := range q.queue {
+		topRevision := uint64(0)
 		svcNodes := q.cs.nodeRegistry.nodesContainingService(svcKey)
-		if topSvcKey == emptySvcKey {
-			topSvcKey = svcKey
-		}
 		for _, node := range svcNodes {
 			if node.revision > topRevision {
 				topRevision = node.revision
-				topSvcKey = svcKey
 			}
 		}
+		extendEntries = append(extendEntries, queueEntryWithNodeRecent{
+			queueEntry:  entry,
+			topRevision: topRevision,
+		})
 	}
 
-	if topSvcKey == emptySvcKey {
+	if len(extendEntries) == 0 {
 		return queueEntry{}, false, nil
 	}
 
-	entry := q.queue[topSvcKey]
-	delete(q.queue, topSvcKey)
-	return entry, true, nil
+	sort.Slice(extendEntries, func(i, j int) bool {
+		if extendEntries[i].topRevision == extendEntries[j].topRevision {
+			return extendEntries[i].start.Before(extendEntries[j].start)
+		}
+		return extendEntries[i].topRevision > extendEntries[j].topRevision
+	})
+
+	entry := extendEntries[0].queueEntry
+	delete(q.queue, serviceKey{namespace: entry.service.Namespace, name: entry.service.Name})
+	return extendEntries[0].queueEntry, true, nil
 }
 
 func (q *serviceNodeQueue) stopWait() {
@@ -161,12 +177,12 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 					continue
 				}
 
-				err = q.cs.processQueueEntry(item)
+				err = q.processQueueEntry(item)
 				processedTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
 				processedDuration.WithLabelValues(item.service.Namespace, item.service.Name).Set(time.Since(item.start).Seconds())
 				if err != nil {
 					failuresTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
-					q.cs.recorder.Eventf(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, "Error updating load balancer with new hosts %v: %v", item.nodes, err)
+					q.cs.recorder.Eventf(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, "Error updating load balancer with new hosts: %v", err)
 					q.upsert(item.service)
 				}
 			}
@@ -174,14 +190,19 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 	}
 }
 
-func (cs *CSCloud) processQueueEntry(entry queueEntry) error {
-	cs.svcLock.Lock(entry.service)
-	defer cs.svcLock.Unlock(entry.service)
+func (q *serviceNodeQueue) processQueueEntry(entry queueEntry) error {
+	q.cs.svcLock.Lock(entry.service)
+	defer q.cs.svcLock.Unlock(entry.service)
 
-	hostIDs, networkIDs, projectID := idsForNodes(entry.nodes)
+	nodes, err := q.cs.nodeRegistry.nodesForService(entry.service)
+	if err != nil {
+		return err
+	}
+
+	hostIDs, networkIDs, projectID := idsForNodes(nodes)
 
 	// Get the load balancer details and existing rules.
-	lb, err := cs.getLoadBalancer(entry.service, projectID, networkIDs)
+	lb, err := q.cs.getLoadBalancer(entry.service, projectID, networkIDs)
 	if err != nil {
 		return err
 	}
