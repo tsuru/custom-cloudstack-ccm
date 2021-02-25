@@ -40,7 +40,7 @@ type globoNetworkPool struct {
 	VipPort             int    `json:"vipport"`
 	HealthCheckType     string `json:"healthchecktype"`
 	HealthCheck         string `json:"healthcheck"`
-	HealthCheckExpected string `json:"healthcheckexpected"`
+	HealthCheckExpected string `json:"healthcheckexpect"`
 	Id                  int    `json:"id"`
 }
 
