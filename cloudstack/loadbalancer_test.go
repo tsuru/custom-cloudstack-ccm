@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,7 +19,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kubeFake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/scheme"
 	kubeTesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/record"
 )
 
 func init() {
@@ -34,6 +37,13 @@ func newTestCSCloud(t *testing.T, cfg *CSConfig, kubeClient *kubeFake.Clientset)
 	} else {
 		csCloud.kubeClient = kubeFake.NewSimpleClientset()
 	}
+
+	b := record.NewBroadcaster()
+	b.StartLogging(func(format string, args ...interface{}) {
+		fmt.Printf("EVENT: %s\n", fmt.Sprintf(format, args...))
+	})
+	csCloud.recorder = b.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "csccm"})
+
 	return csCloud
 }
 
@@ -2172,6 +2182,9 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 			var persistentLBStatus *corev1.LoadBalancerStatus
 			for i, cc := range tt.calls {
 				t.Logf("call %d", i)
+
+				csCloud.updateLBQueue.start(context.Background())
+
 				svc := cc.svc.DeepCopy()
 				if err == nil && persistentLBStatus != nil {
 					svc.Status.LoadBalancer = *persistentLBStatus
@@ -2190,6 +2203,9 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				if err == nil {
 					persistentLBStatus = lbStatus
 				}
+
+				csCloud.updateLBQueue.stopWait()
+
 				if cc.assert != nil {
 					cc.assert(t, srv, lbStatus, err)
 				}
