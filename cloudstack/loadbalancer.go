@@ -192,7 +192,7 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, err
 	}
 
-	hostIDs, networkIDs, projectID, err := cs.nodeRegistry.idsForService(service)
+	_, networkIDs, projectID, err := cs.nodeRegistry.idsForService(service)
 	if err != nil {
 		return nil, err
 	}
@@ -282,11 +282,13 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		}
 	}
 
-	if err = lb.syncNodes(hostIDs, networkIDs); err != nil {
-		return nil, err
-	}
-
-	if err = lb.updateLoadBalancerPool(); err != nil {
+	err = cs.updateLBQueue.push(queueEntry{
+		service:    service,
+		lb:         lb,
+		start:      time.Now(),
+		updatePool: true,
+	})
+	if err != nil {
 		return nil, err
 	}
 

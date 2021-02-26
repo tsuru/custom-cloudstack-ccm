@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +30,12 @@ import (
 func init() {
 	flag.Set("v", "10")
 	flag.Set("logtostderr", "true")
+	defaultFailureBackoff = 200 * time.Millisecond
+}
+
+var globalTestEvents struct {
+	sync.Mutex
+	events []string
 }
 
 func newTestCSCloud(t *testing.T, cfg *CSConfig, kubeClient *kubeFake.Clientset) *CSCloud {
@@ -38,13 +47,42 @@ func newTestCSCloud(t *testing.T, cfg *CSConfig, kubeClient *kubeFake.Clientset)
 		csCloud.kubeClient = kubeFake.NewSimpleClientset()
 	}
 
+	globalTestEvents.Lock()
+	globalTestEvents.events = nil
+	globalTestEvents.Unlock()
+
 	b := record.NewBroadcaster()
 	b.StartLogging(func(format string, args ...interface{}) {
-		fmt.Printf("EVENT: %s\n", fmt.Sprintf(format, args...))
+		msg := fmt.Sprintf(format, args...)
+		fmt.Printf("EVENT: %s\n", msg)
+		globalTestEvents.Lock()
+		globalTestEvents.events = append(globalTestEvents.events, msg)
+		globalTestEvents.Unlock()
 	})
 	csCloud.recorder = b.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "csccm"})
 
 	return csCloud
+}
+
+func waitEvent(t *testing.T, expected string) {
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			t.Errorf("timeout waiting for event with message %q", expected)
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+		globalTestEvents.Lock()
+		evts := globalTestEvents.events
+		if len(evts) > 0 {
+			if strings.Contains(evts[len(evts)-1], expected) {
+				globalTestEvents.Unlock()
+				return
+			}
+		}
+		globalTestEvents.Unlock()
+	}
 }
 
 func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
@@ -547,8 +585,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 						return *svc
 					})(),
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						require.Error(t, err)
-						assert.Contains(t, err.Error(), "error list load balancer pools for lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)): no LB pools found")
+						require.NoError(t, err)
+						waitEvent(t, "error list load balancer pools for lb(svc1.test.com, 11111111-2222-3333-4444-555555555555, lbrule(lbrule-1, svc1.test.com), ip(ip-1, 10.0.0.1), svc(myns/svc1)): no LB pools found")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -578,6 +616,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
 						})
+						// wait for failed event backoff
+						time.Sleep(2 * time.Second)
 					},
 				},
 				{
@@ -607,6 +647,9 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "updateGloboNetworkPool", Params: url.Values{"lbruleid": []string{"lbrule-1"}, "poolids": []string{"1"}, "healthchecktype": []string{"HTTPS"}, "healthcheck": []string{"GET /test HTTP/1.0"}, "expectedhealthcheck": []string{"bleh"}}},
 							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
+							{Command: "listGloboNetworkPools", Params: url.Values{"lbruleid": []string{"lbrule-1"}}},
 						})
 					},
 				},
@@ -1174,8 +1217,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 				{
 					svc: baseSvc,
 					assert: func(t *testing.T, srv *cloudstackFake.CloudstackServer, lbStatus *corev1.LoadBalancerStatus, err error) {
-						require.Error(t, err)
-						require.Contains(t, err.Error(), "my error")
+						require.NoError(t, err)
+						waitEvent(t, "my error")
 						srv.HasCalls(t, []cloudstackFake.MockAPICall{
 							{Command: "listVirtualMachines"},
 							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
@@ -1203,6 +1246,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
 						})
+						// wait for failed task backoff
+						time.Sleep(2 * time.Second)
 					},
 				},
 				{
@@ -1216,6 +1261,8 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 							{Command: "queryAsyncJobResult"},
 							{Command: "assignToLoadBalancerRule", Params: url.Values{"id": []string{"lbrule-1"}, "virtualmachineids": []string{"vm1"}}},
 							{Command: "queryAsyncJobResult"},
+							{Command: "listLoadBalancerRules", Params: url.Values{"keyword": []string{"svc1.test.com"}}},
+							{Command: "listLoadBalancerRuleInstances", Params: url.Values{"page": []string{"1"}, "id": []string{"lbrule-1"}}},
 						})
 					},
 				},
@@ -2348,8 +2395,10 @@ func Test_CSCloud_GetLoadBalancer(t *testing.T) {
 			if tt.ensureNodes != nil {
 				_, err = csCloud.kubeClient.CoreV1().Services(tt.svc.Namespace).Create(&tt.svc)
 				assert.NoError(t, err)
+				csCloud.updateLBQueue.start(context.Background())
 				_, err = csCloud.EnsureLoadBalancer(context.Background(), "kuberentes", &tt.svc, tt.ensureNodes)
 				assert.NoError(t, err)
+				csCloud.updateLBQueue.stopWait()
 			}
 			srv.Calls = nil
 			lb, exists, err := csCloud.GetLoadBalancer(context.Background(), "kubernetes", &tt.svc)
@@ -2623,8 +2672,10 @@ func Test_CSCloud_UpdateLoadBalancer(t *testing.T) {
 			if tt.ensureCall != nil {
 				_, err = csCloud.kubeClient.CoreV1().Services(tt.ensureCall.svc.Namespace).Create(&tt.ensureCall.svc)
 				assert.NoError(t, err)
+				csCloud.updateLBQueue.start(context.Background())
 				_, err = csCloud.EnsureLoadBalancer(context.Background(), "kuberentes", &tt.ensureCall.svc, tt.ensureCall.nodes)
 				assert.NoError(t, err)
+				csCloud.updateLBQueue.stopWait()
 			}
 			srv.Calls = nil
 			for _, env := range csCloud.environments {
