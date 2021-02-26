@@ -2262,6 +2262,10 @@ func Test_CSCloud_EnsureLoadBalancer(t *testing.T) {
 					cc.assertSvc(t, clusterSvc)
 				}
 				srv.Calls = nil
+
+				// flush pending calls
+				csCloud.updateLBQueue.start(context.Background())
+				csCloud.updateLBQueue.stopWait()
 			}
 		})
 	}
