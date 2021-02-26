@@ -3,6 +3,7 @@ package cloudstack
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
@@ -39,6 +40,14 @@ func newNodeRegistry(cs *CSCloud) *nodeRegistry {
 	}
 }
 
+func nodeInfoNames(nodes []nodeInfo) string {
+	names := make([]string, len(nodes))
+	for i := range nodes {
+		names[i] = nodes[i].name
+	}
+	return strings.Join(names, ",")
+}
+
 func (r *nodeRegistry) nodesContainingService(svcKey serviceKey) []nodeInfo {
 	r.nodesMu.RLock()
 	defer r.nodesMu.RUnlock()
@@ -63,16 +72,18 @@ func (r *nodeRegistry) updateEndpointsNodes(endpoints *v1.Endpoints) {
 	defer r.svcNodesMu.Unlock()
 
 	key := serviceKey{namespace: endpoints.Namespace, name: endpoints.Name}
-	r.svcNodes[key] = sets.String{}
 
+	nodeSet := sets.String{}
 	for _, subset := range endpoints.Subsets {
 		for _, addr := range subset.Addresses {
 			if addr.NodeName == nil {
 				continue
 			}
-			r.svcNodes[key].Insert(*addr.NodeName)
+			nodeSet.Insert(*addr.NodeName)
 		}
 	}
+
+	r.svcNodes[key] = nodeSet
 }
 
 func (r *nodeRegistry) deleteEndpointsNodes(endpoints *v1.Endpoints) {
