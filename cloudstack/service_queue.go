@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	defaultFailureBackoff  = 15 * time.Second
 	defaultUpdateLBWorkers = 5
 
 	promNamespace = "csccm"
@@ -24,6 +23,8 @@ const (
 )
 
 var (
+	defaultFailureBackoff = 15 * time.Second
+
 	processedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: promNamespace,
 		Subsystem: promSubsystem,
@@ -56,6 +57,7 @@ type updateLBNodeQueue struct {
 
 type queueEntry struct {
 	service      *corev1.Service
+	lb           *loadBalancer
 	updatePool   bool
 	start        time.Time
 	backoffUntil time.Time
@@ -76,6 +78,7 @@ func newServiceNodeQueue(cs *CSCloud) *updateLBNodeQueue {
 func (q *updateLBNodeQueue) pushWithBackoff(entry queueEntry, backoff time.Duration) error {
 	entry.backoffUntil = time.Now().Add(backoff)
 	entry.start = time.Now()
+	entry.lb = nil
 	return q.push(entry)
 }
 
@@ -88,7 +91,10 @@ func (q *updateLBNodeQueue) push(entry queueEntry) error {
 		name:      entry.service.Name,
 	}
 
-	if _, ok := q.queue[key]; ok {
+	if existing, ok := q.queue[key]; ok {
+		existing.service = entry.service.DeepCopy()
+		existing.lb = nil
+		q.queue[key] = existing
 		return nil
 	}
 
@@ -103,6 +109,7 @@ func (q *updateLBNodeQueue) push(entry queueEntry) error {
 		q.queue = map[serviceKey]queueEntry{}
 	}
 
+	entry.service = entry.service.DeepCopy()
 	q.queue[key] = entry
 
 	return nil
@@ -229,20 +236,23 @@ func (q *updateLBNodeQueue) processQueueEntry(entry queueEntry) error {
 
 	hostIDs, networkIDs, projectID := idsForNodes(nodes)
 
-	// Get the load balancer details and existing rules.
-	lb, err := q.cs.getLoadBalancer(entry.service, projectID, networkIDs)
-	if err != nil {
-		return err
-	}
+	lb := entry.lb
+	if lb == nil {
+		// Get the load balancer details and existing rules.
+		lb, err = q.cs.getLoadBalancer(entry.service, projectID, networkIDs)
+		if err != nil {
+			return err
+		}
 
-	if lb.rule == nil {
-		return nil
-	}
+		if lb.rule == nil {
+			return nil
+		}
 
-	err = shouldManageLB(lb)
-	if err != nil {
-		klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s: %v", entry.service.Namespace, entry.service.Name, err)
-		return nil
+		err = shouldManageLB(lb)
+		if err != nil {
+			klog.V(3).Infof("Skipping UpdateLoadBalancer for service %s/%s: %v", entry.service.Namespace, entry.service.Name, err)
+			return nil
+		}
 	}
 
 	err = lb.syncNodes(hostIDs, networkIDs)
