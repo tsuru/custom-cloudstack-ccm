@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xanzy/go-cloudstack/v2/cloudstack"
 	v1 "k8s.io/api/core/v1"
@@ -305,7 +306,10 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 		return err
 	}
 
-	return cs.updateLBQueue.upsert(service)
+	return cs.updateLBQueue.push(queueEntry{
+		service: service,
+		start:   time.Now(),
+	})
 }
 
 // EnsureLoadBalancerDeleted deletes the specified load balancer if it exists, returning

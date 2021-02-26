@@ -119,7 +119,7 @@ type CSCloud struct {
 	environments  map[string]CSEnvironment
 	kubeClient    kubernetes.Interface
 	recorder      record.EventRecorder
-	updateLBQueue *serviceNodeQueue
+	updateLBQueue *updateLBNodeQueue
 	nodeRegistry  *nodeRegistry
 	config        CSConfig
 

@@ -46,7 +46,7 @@ var (
 	}, []string{"namespace", "service"})
 )
 
-type serviceNodeQueue struct {
+type updateLBNodeQueue struct {
 	sync.Mutex
 	cs     *CSCloud
 	queue  map[serviceKey]queueEntry
@@ -56,6 +56,7 @@ type serviceNodeQueue struct {
 
 type queueEntry struct {
 	service      *corev1.Service
+	updatePool   bool
 	start        time.Time
 	backoffUntil time.Time
 }
@@ -65,24 +66,26 @@ type queueEntryWithNodeRecent struct {
 	topRevision uint64
 }
 
-func newServiceNodeQueue(cs *CSCloud) *serviceNodeQueue {
-	return &serviceNodeQueue{
+func newServiceNodeQueue(cs *CSCloud) *updateLBNodeQueue {
+	return &updateLBNodeQueue{
 		cs:    cs,
 		queue: map[serviceKey]queueEntry{},
 	}
 }
 
-func (q *serviceNodeQueue) upsert(service *corev1.Service) error {
-	return q.upsertWithBackoff(service, 0)
+func (q *updateLBNodeQueue) pushWithBackoff(entry queueEntry, backoff time.Duration) error {
+	entry.backoffUntil = time.Now().Add(backoff)
+	entry.start = time.Now()
+	return q.push(entry)
 }
 
-func (q *serviceNodeQueue) upsertWithBackoff(service *corev1.Service, backoff time.Duration) error {
+func (q *updateLBNodeQueue) push(entry queueEntry) error {
 	q.Lock()
 	defer q.Unlock()
 
 	key := serviceKey{
-		namespace: service.Namespace,
-		name:      service.Name,
+		namespace: entry.service.Namespace,
+		name:      entry.service.Name,
 	}
 
 	if _, ok := q.queue[key]; ok {
@@ -91,7 +94,7 @@ func (q *serviceNodeQueue) upsertWithBackoff(service *corev1.Service, backoff ti
 
 	// Simply validate that there are nodes available, we'll fetch them
 	// directly from the registry when running the task.
-	_, err := q.cs.nodeRegistry.nodesForService(service)
+	_, err := q.cs.nodeRegistry.nodesForService(entry.service)
 	if err != nil {
 		return err
 	}
@@ -100,16 +103,12 @@ func (q *serviceNodeQueue) upsertWithBackoff(service *corev1.Service, backoff ti
 		q.queue = map[serviceKey]queueEntry{}
 	}
 
-	q.queue[key] = queueEntry{
-		service:      service,
-		start:        time.Now(),
-		backoffUntil: time.Now().Add(backoff),
-	}
+	q.queue[key] = entry
 
 	return nil
 }
 
-func (q *serviceNodeQueue) pop() (queueEntry, bool, error) {
+func (q *updateLBNodeQueue) pop() (queueEntry, bool, error) {
 	q.Lock()
 	defer q.Unlock()
 
@@ -157,12 +156,12 @@ func (q *serviceNodeQueue) pop() (queueEntry, bool, error) {
 	return extendEntries[0].queueEntry, true, nil
 }
 
-func (q *serviceNodeQueue) stopWait() {
+func (q *updateLBNodeQueue) stopWait() {
 	close(q.stopCh)
 	q.doneWG.Wait()
 }
 
-func (q *serviceNodeQueue) start(ctx context.Context) {
+func (q *updateLBNodeQueue) start(ctx context.Context) {
 	workers := q.cs.config.Global.UpdateLBWorkers
 	if workers == 0 {
 		workers = defaultUpdateLBWorkers
@@ -210,14 +209,14 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 					klog.Error(msg)
 					failuresTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
 					q.cs.recorder.Event(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, msg)
-					q.upsertWithBackoff(item.service, defaultFailureBackoff)
+					q.pushWithBackoff(item, defaultFailureBackoff)
 				}
 			}
 		}()
 	}
 }
 
-func (q *serviceNodeQueue) processQueueEntry(entry queueEntry) error {
+func (q *updateLBNodeQueue) processQueueEntry(entry queueEntry) error {
 	q.cs.svcLock.Lock(entry.service)
 	defer q.cs.svcLock.Unlock(entry.service)
 
@@ -246,5 +245,17 @@ func (q *serviceNodeQueue) processQueueEntry(entry queueEntry) error {
 		return nil
 	}
 
-	return lb.syncNodes(hostIDs, networkIDs)
+	err = lb.syncNodes(hostIDs, networkIDs)
+	if err != nil {
+		return err
+	}
+
+	if entry.updatePool {
+		err = lb.updateLoadBalancerPool()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
