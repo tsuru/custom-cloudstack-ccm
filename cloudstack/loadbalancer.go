@@ -146,7 +146,7 @@ func (cs *CSCloud) GetLoadBalancer(ctx context.Context, clusterName string, serv
 		return nil, false, fmt.Errorf("GetLoadBalancer: service cannot be nil")
 	}
 
-	klog.V(5).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
+	klog.V(4).Infof("GetLoadBalancer(%v, %v, %v)", clusterName, service.Namespace, service.Name)
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
 
@@ -178,7 +178,7 @@ func (cs *CSCloud) EnsureLoadBalancer(ctx context.Context, clusterName string, s
 		return nil, fmt.Errorf("EnsureLoadBalancer: service cannot be nil")
 	}
 
-	klog.V(5).Infof("EnsureLoadBalancer(%v, %v, %v, %v, ports: %d, nodes: %d)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, len(service.Spec.Ports), len(nodes))
+	klog.V(4).Infof("EnsureLoadBalancer(%v, %v, %v, %v, ports: %d, nodes: %d)", clusterName, service.Namespace, service.Name, service.Spec.LoadBalancerIP, len(service.Spec.Ports), len(nodes))
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
 
@@ -298,7 +298,7 @@ func (cs *CSCloud) UpdateLoadBalancer(ctx context.Context, clusterName string, s
 		return fmt.Errorf("UpdateLoadBalancer: service cannot be nil")
 	}
 
-	klog.V(5).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
+	klog.V(4).Infof("UpdateLoadBalancer(%v, %v, %v, %#v)", clusterName, service.Namespace, service.Name, nodes)
 
 	err := cs.nodeRegistry.updateNodes(nodes)
 	if err != nil {
@@ -315,7 +315,7 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 		return fmt.Errorf("EnsureLoadBalancerDeleted: service cannot be nil")
 	}
 
-	klog.V(5).Infof("EnsureLoadBalancerDeleted(%v, %v, %v)", clusterName, service.Namespace, service.Name)
+	klog.V(4).Infof("EnsureLoadBalancerDeleted(%v, %v, %v)", clusterName, service.Namespace, service.Name)
 	cs.svcLock.Lock(service)
 	defer cs.svcLock.Unlock(service)
 
@@ -359,16 +359,16 @@ func (cs *CSCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName st
 // isLBRemovalEnabled indicates whether the configurations for load balancer
 // removal is enabled.
 func isLBRemovalEnabled(lb *loadBalancer, service *v1.Service) bool {
-	klog.V(5).Infof("isLBRemovalEnabled(%v, %v, %v)", lb, service.Namespace, service.Name)
+	klog.V(4).Infof("isLBRemovalEnabled(%v, %v, %v)", lb, service.Namespace, service.Name)
 
 	if removeLBFlag, ok := getLabelOrAnnotation(service.ObjectMeta, removeLBsOnDeleteLabelKey); ok {
-		klog.V(5).Infof("LB removal flag %q has been found on %q Service labels/annotations", removeLBFlag, service)
+		klog.V(4).Infof("LB removal flag %q has been found on %q Service labels/annotations", removeLBFlag, service)
 		if b, err := strconv.ParseBool(removeLBFlag); err == nil {
 			return b
 		}
 	}
 
-	klog.V(5).Infof("checking whether the LB removal is enabled for the %q environment", lb.cloud.environment)
+	klog.V(4).Infof("checking whether the LB removal is enabled for the %q environment", lb.cloud.environment)
 	return lb.cloud.environments[lb.cloud.environment].removeLBs
 }
 

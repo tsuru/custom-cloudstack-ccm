@@ -4,6 +4,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,12 +103,31 @@ func preparePopTest(t *testing.T) (*CSCloud, func()) {
 				},
 			},
 		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s4"},
+			Subsets: []corev1.EndpointSubset{
+				{
+					Addresses: []corev1.EndpointAddress{
+						{
+							NodeName: strPtr("n3"),
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, ep := range endpoints {
 		cs.nodeRegistry.updateEndpointsNodes(&ep)
 	}
 
-	err = cs.updateLBQueue.upsert(&v1.Service{
+	return cs, srv.Close
+}
+
+func Test_serviceNodeQueue_upsert_pop(t *testing.T) {
+	cs, cleanup := preparePopTest(t)
+	defer cleanup()
+
+	err := cs.updateLBQueue.upsert(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s3"},
 	})
 	require.NoError(t, err)
@@ -119,13 +139,6 @@ func preparePopTest(t *testing.T) (*CSCloud, func()) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s1"},
 	})
 	require.NoError(t, err)
-
-	return cs, srv.Close
-}
-
-func Test_serviceNodeQueue_pop(t *testing.T) {
-	cs, cleanup := preparePopTest(t)
-	defer cleanup()
 
 	entry, ok, err := cs.updateLBQueue.pop()
 	require.NoError(t, err)
@@ -147,9 +160,70 @@ func Test_serviceNodeQueue_pop(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func Test_serviceNodeQueue_upsertWithBackoff_pop(t *testing.T) {
+	cs, cleanup := preparePopTest(t)
+	defer cleanup()
+
+	err := cs.updateLBQueue.upsert(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s3"},
+	})
+	require.NoError(t, err)
+	err = cs.updateLBQueue.upsertWithBackoff(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s2"},
+	}, time.Second)
+	require.NoError(t, err)
+	err = cs.updateLBQueue.upsert(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s1"},
+	})
+	require.NoError(t, err)
+	err = cs.updateLBQueue.upsert(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s4"},
+	})
+	require.NoError(t, err)
+
+	entry, ok, err := cs.updateLBQueue.pop()
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "s4", entry.service.Name)
+
+	entry, ok, err = cs.updateLBQueue.pop()
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "s3", entry.service.Name)
+
+	entry, ok, err = cs.updateLBQueue.pop()
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "s1", entry.service.Name)
+
+	_, ok, err = cs.updateLBQueue.pop()
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	time.Sleep(2 * time.Second)
+
+	entry, ok, err = cs.updateLBQueue.pop()
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "s2", entry.service.Name)
+}
+
 func Test_serviceNodeQueue_pop_race(t *testing.T) {
 	cs, cleanup := preparePopTest(t)
 	defer cleanup()
+
+	err := cs.updateLBQueue.upsert(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s3"},
+	})
+	require.NoError(t, err)
+	err = cs.updateLBQueue.upsert(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s2"},
+	})
+	require.NoError(t, err)
+	err = cs.updateLBQueue.upsert(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s1"},
+	})
+	require.NoError(t, err)
 
 	nGoroutines := 10
 

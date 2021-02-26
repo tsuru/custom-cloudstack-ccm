@@ -2,6 +2,7 @@ package cloudstack
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 )
 
 const (
+	defaultFailureBackoff  = 15 * time.Second
 	defaultUpdateLBWorkers = 5
 
 	promNamespace = "csccm"
@@ -53,8 +55,9 @@ type serviceNodeQueue struct {
 }
 
 type queueEntry struct {
-	service *corev1.Service
-	start   time.Time
+	service      *corev1.Service
+	start        time.Time
+	backoffUntil time.Time
 }
 
 type queueEntryWithNodeRecent struct {
@@ -70,6 +73,10 @@ func newServiceNodeQueue(cs *CSCloud) *serviceNodeQueue {
 }
 
 func (q *serviceNodeQueue) upsert(service *corev1.Service) error {
+	return q.upsertWithBackoff(service, 0)
+}
+
+func (q *serviceNodeQueue) upsertWithBackoff(service *corev1.Service, backoff time.Duration) error {
 	q.Lock()
 	defer q.Unlock()
 
@@ -94,8 +101,9 @@ func (q *serviceNodeQueue) upsert(service *corev1.Service) error {
 	}
 
 	q.queue[key] = queueEntry{
-		service: service,
-		start:   time.Now(),
+		service:      service,
+		start:        time.Now(),
+		backoffUntil: time.Now().Add(backoff),
 	}
 
 	return nil
@@ -126,6 +134,12 @@ func (q *serviceNodeQueue) pop() (queueEntry, bool, error) {
 	}
 
 	sort.Slice(extendEntries, func(i, j int) bool {
+		if time.Until(extendEntries[i].backoffUntil) > 0 {
+			return false
+		}
+		if time.Until(extendEntries[j].backoffUntil) > 0 {
+			return true
+		}
 		if extendEntries[i].topRevision == extendEntries[j].topRevision {
 			return extendEntries[i].start.Before(extendEntries[j].start)
 		}
@@ -133,6 +147,12 @@ func (q *serviceNodeQueue) pop() (queueEntry, bool, error) {
 	})
 
 	entry := extendEntries[0].queueEntry
+	if time.Until(entry.backoffUntil) > 0 {
+		return queueEntry{}, false, nil
+	}
+
+	klog.V(4).Infof("Popping queued service %v/%v revision %d start %v", entry.service.Namespace, entry.service.Name, extendEntries[0].topRevision, entry.start)
+
 	delete(q.queue, serviceKey{namespace: entry.service.Namespace, name: entry.service.Name})
 	return extendEntries[0].queueEntry, true, nil
 }
@@ -152,7 +172,7 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 		q.doneWG.Add(1)
 		go func() {
 			defer q.doneWG.Done()
-			waitCh := time.After(0)
+			waitTimer := time.NewTimer(0)
 			exitWhenDone := false
 			for {
 				select {
@@ -160,7 +180,8 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 					return
 				case <-q.stopCh:
 					exitWhenDone = true
-				case <-waitCh:
+				case <-waitTimer.C:
+					waitTimer.Reset(0)
 				}
 
 				item, ok, err := q.pop()
@@ -173,7 +194,11 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 					if exitWhenDone {
 						return
 					}
-					waitCh = time.After(time.Second)
+
+					if !waitTimer.Stop() {
+						<-waitTimer.C
+					}
+					waitTimer.Reset(time.Second)
 					continue
 				}
 
@@ -181,9 +206,11 @@ func (q *serviceNodeQueue) start(ctx context.Context) {
 				processedTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
 				processedDuration.WithLabelValues(item.service.Namespace, item.service.Name).Set(time.Since(item.start).Seconds())
 				if err != nil {
+					msg := fmt.Sprintf("Error updating load balancer with new hosts: %v", err)
+					klog.Error(msg)
 					failuresTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
-					q.cs.recorder.Eventf(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, "Error updating load balancer with new hosts: %v", err)
-					q.upsert(item.service)
+					q.cs.recorder.Event(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, msg)
+					q.upsertWithBackoff(item.service, defaultFailureBackoff)
 				}
 			}
 		}()
@@ -198,6 +225,8 @@ func (q *serviceNodeQueue) processQueueEntry(entry queueEntry) error {
 	if err != nil {
 		return err
 	}
+
+	klog.V(4).Infof("Processing lb update for service %v/%v with nodes %v", entry.service.Namespace, entry.service.Name, nodeInfoNames(nodes))
 
 	hostIDs, networkIDs, projectID := idsForNodes(nodes)
 
