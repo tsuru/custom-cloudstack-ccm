@@ -19,7 +19,8 @@ const (
 	promNamespace = "csccm"
 	promSubsystem = "update_lb_queue"
 
-	eventReasonUpdateFailed = "UpdateLoadBalancerFailed"
+	eventReasonUpdateFailed  = "QueuedUpdateLoadBalancerFailed"
+	eventReasonUpdateSuccess = "QueuedUpdatedLoadBalancer"
 )
 
 var (
@@ -217,6 +218,8 @@ func (q *updateLBNodeQueue) start(ctx context.Context) {
 					failuresTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
 					q.cs.recorder.Event(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, msg)
 					q.pushWithBackoff(item, defaultFailureBackoff)
+				} else {
+					q.cs.recorder.Event(item.service, corev1.EventTypeNormal, eventReasonUpdateSuccess, "Updated load balancer with new hosts")
 				}
 			}
 		}()

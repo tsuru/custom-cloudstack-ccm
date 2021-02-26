@@ -37,6 +37,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/transport"
 	cloudprovider "k8s.io/cloud-provider"
+	"k8s.io/klog"
 )
 
 // ProviderName is the name of this cloud provider.
@@ -220,6 +221,7 @@ func newCSCloud(cfg *CSConfig) (*CSCloud, error) {
 func (cs *CSCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct{}) {
 	cs.kubeClient = clientBuilder.ClientOrDie(ProviderName)
 	b := record.NewBroadcaster()
+	b.StartLogging(klog.Infof)
 	b.StartRecordingToSink(&typedcore.EventSinkImpl{Interface: typedcore.New(cs.kubeClient.CoreV1().RESTClient()).Events("")})
 	cs.recorder = b.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "csccm"})
 
