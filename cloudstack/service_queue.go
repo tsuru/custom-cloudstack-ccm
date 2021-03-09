@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 )
 
@@ -24,7 +25,8 @@ const (
 )
 
 var (
-	defaultFailureBackoff = 15 * time.Second
+	minRetryDelay = 15 * time.Second
+	maxRetryDelay = 10 * time.Minute
 
 	processedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: promNamespace,
@@ -46,14 +48,22 @@ var (
 		Name:      "item_duration_seconds",
 		Help:      "The duration of the last processed queue item",
 	}, []string{"namespace", "service"})
+
+	queueSize = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: promNamespace,
+		Subsystem: promSubsystem,
+		Name:      "size",
+		Help:      "The current queue size",
+	})
 )
 
 type updateLBNodeQueue struct {
 	sync.Mutex
-	cs     *CSCloud
-	queue  map[serviceKey]queueEntry
-	doneWG sync.WaitGroup
-	stopCh chan struct{}
+	cs          *CSCloud
+	queue       map[serviceKey]queueEntry
+	doneWG      sync.WaitGroup
+	stopCh      chan struct{}
+	rateLimiter workqueue.RateLimiter
 }
 
 type queueEntry struct {
@@ -71,26 +81,32 @@ type queueEntryWithNodeRecent struct {
 
 func newServiceNodeQueue(cs *CSCloud) *updateLBNodeQueue {
 	return &updateLBNodeQueue{
-		cs:    cs,
-		queue: map[serviceKey]queueEntry{},
+		cs:          cs,
+		queue:       map[serviceKey]queueEntry{},
+		rateLimiter: workqueue.NewItemExponentialFailureRateLimiter(minRetryDelay, maxRetryDelay),
 	}
 }
 
-func (q *updateLBNodeQueue) pushWithBackoff(entry queueEntry, backoff time.Duration) error {
+func svcKey(svc *corev1.Service) serviceKey {
+	return serviceKey{
+		namespace: svc.Namespace,
+		name:      svc.Name,
+	}
+}
+
+func (q *updateLBNodeQueue) pushWithBackoff(entry queueEntry) (time.Duration, error) {
+	backoff := q.rateLimiter.When(svcKey(entry.service))
 	entry.backoffUntil = time.Now().Add(backoff)
 	entry.start = time.Now()
 	entry.lb = nil
-	return q.push(entry)
+	return backoff, q.push(entry)
 }
 
 func (q *updateLBNodeQueue) push(entry queueEntry) error {
 	q.Lock()
 	defer q.Unlock()
 
-	key := serviceKey{
-		namespace: entry.service.Namespace,
-		name:      entry.service.Name,
-	}
+	key := svcKey(entry.service)
 
 	if existing, ok := q.queue[key]; ok {
 		existing.service = entry.service.DeepCopy()
@@ -112,6 +128,7 @@ func (q *updateLBNodeQueue) push(entry queueEntry) error {
 
 	entry.service = entry.service.DeepCopy()
 	q.queue[key] = entry
+	queueSize.Set(float64(len(q.queue)))
 
 	return nil
 }
@@ -120,7 +137,7 @@ func (q *updateLBNodeQueue) pop() (queueEntry, bool, error) {
 	q.Lock()
 	defer q.Unlock()
 
-	var extendEntries []queueEntryWithNodeRecent
+	var extendEntries sortableQueueEntries
 
 	for svcKey, entry := range q.queue {
 		topRevision := uint64(0)
@@ -140,18 +157,7 @@ func (q *updateLBNodeQueue) pop() (queueEntry, bool, error) {
 		return queueEntry{}, false, nil
 	}
 
-	sort.Slice(extendEntries, func(i, j int) bool {
-		if time.Until(extendEntries[i].backoffUntil) > 0 {
-			return false
-		}
-		if time.Until(extendEntries[j].backoffUntil) > 0 {
-			return true
-		}
-		if extendEntries[i].topRevision == extendEntries[j].topRevision {
-			return extendEntries[i].start.Before(extendEntries[j].start)
-		}
-		return extendEntries[i].topRevision > extendEntries[j].topRevision
-	})
+	sort.Sort(extendEntries)
 
 	entry := extendEntries[0].queueEntry
 	if time.Until(entry.backoffUntil) > 0 {
@@ -160,7 +166,7 @@ func (q *updateLBNodeQueue) pop() (queueEntry, bool, error) {
 
 	klog.V(4).Infof("Popping queued service %v/%v revision %d start %v", entry.service.Namespace, entry.service.Name, extendEntries[0].topRevision, entry.start)
 
-	delete(q.queue, serviceKey{namespace: entry.service.Namespace, name: entry.service.Name})
+	delete(q.queue, svcKey(entry.service))
 	return extendEntries[0].queueEntry, true, nil
 }
 
@@ -213,12 +219,20 @@ func (q *updateLBNodeQueue) start(ctx context.Context) {
 				processedTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
 				processedDuration.WithLabelValues(item.service.Namespace, item.service.Name).Set(time.Since(item.start).Seconds())
 				if err != nil {
-					msg := fmt.Sprintf("Error updating load balancer with new hosts: %v", err)
-					klog.Error(msg)
 					failuresTotal.WithLabelValues(item.service.Namespace, item.service.Name).Inc()
+
+					var retryMsg string
+					backoff, pushErr := q.pushWithBackoff(item)
+					if pushErr != nil {
+						retryMsg = fmt.Sprintf("error trying to requeue: %v", pushErr)
+					} else {
+						retryMsg = fmt.Sprintf("retry in %v", backoff)
+					}
+					msg := fmt.Sprintf("Error updating load balancer with new hosts: %v - %v", err, retryMsg)
+					klog.Error(msg)
 					q.cs.recorder.Event(item.service, corev1.EventTypeWarning, eventReasonUpdateFailed, msg)
-					q.pushWithBackoff(item, defaultFailureBackoff)
 				} else {
+					q.rateLimiter.Forget(svcKey(item.service))
 					q.cs.recorder.Event(item.service, corev1.EventTypeNormal, eventReasonUpdateSuccess, "Updated load balancer with new hosts")
 				}
 			}
@@ -271,4 +285,28 @@ func (q *updateLBNodeQueue) processQueueEntry(entry queueEntry) error {
 	}
 
 	return nil
+}
+
+type sortableQueueEntries []queueEntryWithNodeRecent
+
+var _ sort.Interface = sortableQueueEntries{}
+
+func (e sortableQueueEntries) Len() int {
+	return len(e)
+}
+
+func (e sortableQueueEntries) Less(i, j int) bool {
+	if (time.Until(e[i].backoffUntil) > 0 ||
+		time.Until(e[j].backoffUntil) > 0) &&
+		e[i].backoffUntil != e[j].backoffUntil {
+		return e[i].backoffUntil.Before(e[j].backoffUntil)
+	}
+	if e[i].topRevision == e[j].topRevision {
+		return e[i].start.Before(e[j].start)
+	}
+	return e[i].topRevision > e[j].topRevision
+}
+
+func (e sortableQueueEntries) Swap(i, j int) {
+	e[i], e[j] = e[j], e[i]
 }

@@ -161,6 +161,7 @@ func Test_serviceNodeQueue_upsert_pop(t *testing.T) {
 }
 
 func Test_serviceNodeQueue_upsertWithBackoff_pop(t *testing.T) {
+	minRetryDelay = 500 * time.Millisecond
 	cs, cleanup := preparePopTest(t)
 	defer cleanup()
 
@@ -168,10 +169,11 @@ func Test_serviceNodeQueue_upsertWithBackoff_pop(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s3"},
 	}, start: time.Now()})
 	require.NoError(t, err)
-	err = cs.updateLBQueue.pushWithBackoff(queueEntry{service: &v1.Service{
+	backoff, err := cs.updateLBQueue.pushWithBackoff(queueEntry{service: &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s2"},
-	}, start: time.Now()}, 500*time.Millisecond)
+	}, start: time.Now()})
 	require.NoError(t, err)
+	assert.Equal(t, minRetryDelay, backoff)
 	err = cs.updateLBQueue.push(queueEntry{service: &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s1"},
 	}, start: time.Now()})
@@ -200,7 +202,7 @@ func Test_serviceNodeQueue_upsertWithBackoff_pop(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 
-	time.Sleep(time.Second)
+	time.Sleep(2 * minRetryDelay)
 
 	entry, ok, err = cs.updateLBQueue.pop()
 	require.NoError(t, err)
@@ -250,4 +252,73 @@ func Test_serviceNodeQueue_pop_race(t *testing.T) {
 
 	sort.Strings(strEntries)
 	assert.Equal(t, []string{"s1", "s2", "s3"}, strEntries)
+}
+
+func Test_sortableQueueEntries(t *testing.T) {
+	t0 := time.Now()
+	entries := sortableQueueEntries{
+		{
+			queueEntry: queueEntry{
+				service: &v1.Service{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s1"},
+				},
+				backoffUntil: t0.Add(200 * time.Millisecond),
+				start:        t0,
+			},
+			topRevision: 3,
+		},
+		{
+			queueEntry: queueEntry{
+				service: &v1.Service{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s2"},
+				},
+				start: t0,
+			},
+			topRevision: 2,
+		},
+		{
+			queueEntry: queueEntry{
+				service: &v1.Service{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s3"},
+				},
+				start: t0,
+			},
+			topRevision: 1,
+		},
+		{
+			queueEntry: queueEntry{
+				service: &v1.Service{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s4"},
+				},
+				backoffUntil: t0.Add(200 * time.Millisecond),
+				start:        t0.Add(-time.Second),
+			},
+			topRevision: 1,
+		},
+		{
+			queueEntry: queueEntry{
+				service: &v1.Service{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "s5"},
+				},
+				backoffUntil: t0.Add(time.Second),
+				start:        t0.Add(-time.Second),
+			},
+			topRevision: 10,
+		},
+	}
+
+	sort.Sort(entries)
+	assert.Equal(t, []string{"s2", "s3", "s1", "s4", "s5"}, entriesToSvcNames(entries))
+
+	time.Sleep(400 * time.Millisecond)
+	sort.Sort(entries)
+	assert.Equal(t, []string{"s1", "s2", "s4", "s3", "s5"}, entriesToSvcNames(entries))
+}
+
+func entriesToSvcNames(entries sortableQueueEntries) []string {
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.queueEntry.service.Name)
+	}
+	return names
 }

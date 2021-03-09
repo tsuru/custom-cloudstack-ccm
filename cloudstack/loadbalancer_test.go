@@ -30,7 +30,7 @@ import (
 func init() {
 	flag.Set("v", "10")
 	flag.Set("logtostderr", "true")
-	defaultFailureBackoff = 200 * time.Millisecond
+	minRetryDelay = 200 * time.Millisecond
 }
 
 var globalTestEvents struct {
