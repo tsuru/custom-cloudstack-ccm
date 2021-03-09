@@ -167,6 +167,7 @@ func (q *updateLBNodeQueue) pop() (queueEntry, bool, error) {
 	klog.V(4).Infof("Popping queued service %v/%v revision %d start %v", entry.service.Namespace, entry.service.Name, extendEntries[0].topRevision, entry.start)
 
 	delete(q.queue, svcKey(entry.service))
+	queueSize.Set(float64(len(q.queue)))
 	return extendEntries[0].queueEntry, true, nil
 }
 
