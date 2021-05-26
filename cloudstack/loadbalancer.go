@@ -75,8 +75,9 @@ type loadBalancer struct {
 }
 
 type cloudstackIP struct {
-	id      string
-	address string
+	id        string
+	address   string
+	networkid string
 }
 
 type loadBalancerRule struct {
@@ -413,8 +414,9 @@ func (cs *CSCloud) getLoadBalancer(service *v1.Service, projectID string, networ
 
 	if lb.rule != nil {
 		lb.ip = cloudstackIP{
-			address: lb.rule.Publicip,
-			id:      lb.rule.Publicipid,
+			address:   lb.rule.Publicip,
+			id:        lb.rule.Publicipid,
+			networkid: lb.rule.Networkid,
 		}
 		lb.mainNetworkID = lb.rule.Networkid
 	}
@@ -567,6 +569,7 @@ func (lb *loadBalancer) loadLoadBalancerIP() error {
 		return err
 	}
 	lb.ip = *ip
+	lb.mainNetworkID = ip.networkid
 	return nil
 }
 
@@ -696,8 +699,9 @@ func (pc *projectCloud) tryPublicIPAddressByTags(service *v1.Service) (*cloudsta
 		// when multiple tags are specified and we want an AND.
 		if matchAllTags(publicIP.Tags, tags) {
 			validIPs = append(validIPs, cloudstackIP{
-				id:      publicIP.Id,
-				address: publicIP.Ipaddress,
+				id:        publicIP.Id,
+				address:   publicIP.Ipaddress,
+				networkid: publicIP.Networkid,
 			})
 		}
 	}
@@ -744,8 +748,9 @@ func (pc *projectCloud) getPublicIPAddressByIP(loadBalancerIP string) (*cloudsta
 
 	publicIP := l.PublicIpAddresses[0]
 	return &cloudstackIP{
-		address: publicIP.Ipaddress,
-		id:      publicIP.Id,
+		address:   publicIP.Ipaddress,
+		id:        publicIP.Id,
+		networkid: publicIP.Networkid,
 	}, nil
 }
 
@@ -824,8 +829,9 @@ func (pc *projectCloud) associatePublicIPAddress(service *v1.Service, networkID 
 	}
 
 	ip := cloudstackIP{
-		id:      result.Id,
-		address: result.Ipaddress,
+		id:        result.Id,
+		address:   result.Ipaddress,
+		networkid: result.Networkid,
 	}
 	if result.JobID != "" {
 		klog.V(4).Infof("Querying async job %s for cmd %q for IP %v", result.JobID, associateCommand, ip)

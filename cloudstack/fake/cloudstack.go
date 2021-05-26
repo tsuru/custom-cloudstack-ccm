@@ -277,8 +277,9 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ipIdx := s.newID(cmd)
 		ipID := fmt.Sprintf("ip-%d", ipIdx)
 		obj := cloudstack.AssociateIpAddressResponse{
-			Id:    ipID,
-			JobID: fmt.Sprintf("job-ip-%d", ipIdx),
+			Id:        ipID,
+			JobID:     fmt.Sprintf("job-ip-%d", ipIdx),
+			Networkid: r.FormValue("networkid"),
 		}
 		w.Write(MarshalResponse("associateIpAddressResponse", obj))
 		s.Jobs[obj.JobID] = func() interface{} {
@@ -286,6 +287,7 @@ func (s *CloudstackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.ips[ipID] = &cloudstack.PublicIpAddress{
 				Id:        obj.Id,
 				Ipaddress: obj.Ipaddress,
+				Networkid: obj.Networkid,
 			}
 			return obj
 		}
